@@ -1,122 +1,671 @@
 import 'package:flutter/material.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const HabitApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class HabitApp extends StatelessWidget {
+  const HabitApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Habits',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.white,
+          surface: Colors.black,
+        ),
+        scaffoldBackgroundColor: Colors.black,
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const HabitHomePage(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
+class Habit {
+  final String id;
   final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  bool isDone;
+  Habit({required this.id, required this.title, this.isDone = false});
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class HabitHomePage extends StatefulWidget {
+  const HabitHomePage({super.key});
+  @override
+  State<HabitHomePage> createState() => _HabitHomePageState();
+}
 
-  void _incrementCounter() {
+class _HabitHomePageState extends State<HabitHomePage> {
+  // ── SOURCE OF TRUTH ──
+  // selectedDate: the single source of truth for selection
+  DateTime _selectedDate = DateTime.now();
+
+  // visibleWeekStart: the Monday of the currently visible 7-day strip
+  // Independent of selectedDate — only changed by bottom arrows
+  late DateTime _visibleWeekStart;
+
+  final List<Habit> _habits = [];
+  final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize visible week to the Monday of the current week
+    _visibleWeekStart = _getMondayOf(_selectedDate);
+  }
+
+  // ── HELPERS ──
+
+  // Get Monday of the week containing [date]
+  DateTime _getMondayOf(DateTime date) {
+    return date.subtract(Duration(days: date.weekday - 1));
+  }
+
+  // Get the 7 days of the visible strip
+  List<DateTime> get _visibleWeekDays {
+    return List.generate(7, (i) => _visibleWeekStart.add(Duration(days: i)));
+  }
+
+  // Format selectedDate as full label: "Thursday, 20 Feb 2026"
+  String get _selectedDateLabel {
+    final weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+      'Friday', 'Saturday', 'Sunday'
+    ];
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return '${weekdays[_selectedDate.weekday - 1]}, '
+        '${_selectedDate.day} '
+        '${months[_selectedDate.month - 1]} '
+        '${_selectedDate.year}';
+  }
+
+  // Full month name from selectedDate — top large text
+  String get _selectedMonthName {
+    const months = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ];
+    return months[_selectedDate.month - 1];
+  }
+
+  // ── TOP ARROWS: Change month of selectedDate, reset to day 1 ──
+  void _previousMonth() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _selectedDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month - 1,
+        1,
+      );
+      // Move visible strip to show the week of the new selectedDate
+      _visibleWeekStart = _getMondayOf(_selectedDate);
     });
+  }
+
+  void _nextMonth() {
+    setState(() {
+      _selectedDate = DateTime(
+        _selectedDate.year,
+        _selectedDate.month + 1,
+        1,
+      );
+      // Move visible strip to show the week of the new selectedDate
+      _visibleWeekStart = _getMondayOf(_selectedDate);
+    });
+  }
+
+  // ── BOTTOM ARROWS: Shift 7-day strip only — do NOT change selectedDate ──
+  void _shiftWeekBack() {
+    setState(() {
+      _visibleWeekStart = _visibleWeekStart.subtract(const Duration(days: 7));
+      // selectedDate is NOT changed
+    });
+  }
+
+  void _shiftWeekForward() {
+    setState(() {
+      _visibleWeekStart = _visibleWeekStart.add(const Duration(days: 7));
+      // selectedDate is NOT changed
+    });
+  }
+
+  // ── USER TAPS A DATE: Only this updates selectedDate ──
+  void _selectDate(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+      // Top month label auto-updates because it derives from selectedDate
+      // Visible strip does NOT change — user stays in same viewport
+    });
+  }
+
+  // ── HABITS ──
+  void _toggleHabit(String id) {
+    setState(() {
+      final h = _habits.firstWhere((h) => h.id == id);
+      h.isDone = !h.isDone;
+    });
+  }
+
+  void _showAddDialog() {
+    _controller.clear();
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF111111),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'NEW HABIT',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 3,
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+                decoration: const InputDecoration(
+                  hintText: 'Habit name...',
+                  hintStyle: TextStyle(color: Colors.white38),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white24),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'CANCEL',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (_controller.text.trim().isNotEmpty) {
+                          setState(() => _habits.add(Habit(
+                                id: DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString(),
+                                title: _controller.text.trim(),
+                              )));
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'ADD',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    final visibleDays = _visibleWeekDays;
+
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      backgroundColor: Colors.black,
+      body: SafeArea(
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+
+            // ── TOP BAR: selected date label (left) + icons (right) ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Top-left label — STATIC layout, visibility-only toggle for "TODAY"
+                  // Layout never shifts. "TODAY" is always in the tree but opacity = 0 when not today.
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // "TODAY" label — always occupies space, only opacity changes
+                        Opacity(
+                          opacity: () {
+                            final now = DateTime.now();
+                            return (_selectedDate.year == now.year &&
+                                    _selectedDate.month == now.month &&
+                                    _selectedDate.day == now.day)
+                                ? 1.0
+                                : 0.0;
+                          }(),
+                          child: const Text(
+                            'TODAY',
+                            style: TextStyle(
+                              color: Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        // Formatted date — always visible, always same position
+                        Text(
+                          _selectedDateLabel,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Right icons
+                  Row(children: [
+                    const Icon(Icons.search, color: Colors.white, size: 22),
+                    const SizedBox(width: 18),
+                    const Icon(Icons.calendar_month, color: Colors.white, size: 22),
+                    const SizedBox(width: 18),
+                    const Text(
+                      '?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                  ]),
+                ],
+              ),
+            ),
+
+            // ── HABITS TITLE ──
+            const Center(
+              child: Text(
+                'HABITS',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 3,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── TOP ARROWS + MONTH LABEL ──
+            // Month text derives from selectedDate — always accurate
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Top-left arrow → previous month
+                  GestureDetector(
+                    onTap: _previousMonth,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+
+                  // Month label — strictly derived from selectedDate
+                  Text(
+                    _selectedMonthName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2,
+                    ),
+                  ),
+
+                  // Top-right arrow → next month
+                  GestureDetector(
+                    onTap: _nextMonth,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── BOTTOM ARROWS + 7-DAY STRIP ──
+            // Bottom arrows shift the viewport only — selectedDate unchanged
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  // Bottom-left arrow → shift strip back 7 days
+                  GestureDetector(
+                    onTap: _shiftWeekBack,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_left,
+                        color: Colors.white54,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+
+                  // 7-day date strip
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(7, (i) {
+                        final day = visibleDays[i];
+
+                        // isSelected: matches selectedDate exactly
+                        final isSelected =
+                            day.year == _selectedDate.year &&
+                            day.month == _selectedDate.month &&
+                            day.day == _selectedDate.day;
+
+                        return GestureDetector(
+                          // Tapping a date updates selectedDate
+                          // Top month label auto-updates as it derives from selectedDate
+                          onTap: () => _selectDate(day),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Day label
+                              Text(
+                                dayLabels[i],
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.white38,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+
+                              // Date number with circle
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '${day.day}',
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.white,
+                                      fontSize: 14,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w700
+                                          : FontWeight.w400,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+
+                              // Dot indicator — marks real system TODAY always
+                              Container(
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: (day.year == DateTime.now().year &&
+                                          day.month == DateTime.now().month &&
+                                          day.day == DateTime.now().day)
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+
+                  // Bottom-right arrow → shift strip forward 7 days
+                  GestureDetector(
+                    onTap: _shiftWeekForward,
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.chevron_right,
+                        color: Colors.white54,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            Container(height: 0.5, color: Colors.white12),
+
+            // ── HABIT LIST ──
+            Expanded(
+              child: _habits.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white12),
+                            ),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white24,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'NO HABITS YET',
+                            style: TextStyle(
+                              color: Colors.white24,
+                              fontSize: 12,
+                              letterSpacing: 3,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Tap + to add your first habit',
+                            style: TextStyle(
+                              color: Colors.white24,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      itemCount: _habits.length,
+                      itemBuilder: (context, index) {
+                        final habit = _habits[index];
+                        return Dismissible(
+                          key: Key(habit.id),
+                          direction: DismissDirection.endToStart,
+                          onDismissed: (_) => setState(() =>
+                              _habits.removeWhere((h) => h.id == habit.id)),
+                          background: Container(
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.only(right: 20),
+                            color: Colors.red.withValues(alpha: 0.2),
+                            child: const Text(
+                              'DELETE',
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontSize: 11,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          child: GestureDetector(
+                            onTap: () => _toggleHabit(habit.id),
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 16),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: Colors.white10,
+                                    width: 0.5,
+                                  ),
+                                ),
+                              ),
+                              child: Row(children: [
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: habit.isDone
+                                        ? Colors.white
+                                        : Colors.transparent,
+                                    border: Border.all(
+                                      color: habit.isDone
+                                          ? Colors.white
+                                          : Colors.white38,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: habit.isDone
+                                      ? const Icon(Icons.check,
+                                          color: Colors.black, size: 13)
+                                      : null,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Text(
+                                    habit.title,
+                                    style: TextStyle(
+                                      color: habit.isDone
+                                          ? Colors.white38
+                                          : Colors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w400,
+                                      decoration: habit.isDone
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                      decorationColor: Colors.white38,
+                                    ),
+                                  ),
+                                ),
+                              ]),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+
+      // ── FLOATING + BUTTON ──
+      floatingActionButton: GestureDetector(
+        onTap: _showAddDialog,
+        child: Container(
+          width: 54,
+          height: 54,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.add, color: Colors.black, size: 26),
+        ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 }
