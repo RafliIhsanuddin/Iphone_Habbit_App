@@ -49,6 +49,11 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   final List<Habit> _habits = [];
   final TextEditingController _controller = TextEditingController();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _openDrawer() {
+    _scaffoldKey.currentState?.openDrawer();
+  }
 
   @override
   void initState() {
@@ -263,8 +268,86 @@ class _HabitHomePageState extends State<HabitHomePage> {
     final dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     final visibleDays = _visibleWeekDays;
 
+    // Format today's date for sidebar: "WEDNESDAY" / "APRIL 15, 2026"
+    final now = DateTime.now();
+    final sidebarWeekdays = [
+      'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY',
+      'FRIDAY', 'SATURDAY', 'SUNDAY'
+    ];
+    final sidebarMonths = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ];
+    final sidebarDayName = sidebarWeekdays[now.weekday - 1];
+    final sidebarDateLine =
+        '${sidebarMonths[now.month - 1]} ${now.day}, ${now.year}';
+
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: Colors.black,
+      drawer: Drawer(
+        width: MediaQuery.of(context).size.width * 0.72,
+        backgroundColor: const Color(0xFF1C1C1C),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(28, 32, 28, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Day name — e.g. WEDNESDAY
+                Text(
+                  sidebarDayName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // Date line — e.g. APRIL 15, 2026
+                Text(
+                  sidebarDateLine,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // TODAY label
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Text(
+                    'TODAY',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // HABITS label
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Text(
+                    'HABITS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,41 +361,60 @@ class _HabitHomePageState extends State<HabitHomePage> {
                 children: [
                   // Top-left label — STATIC layout, visibility-only toggle for "TODAY"
                   // Layout never shifts. "TODAY" is always in the tree but opacity = 0 when not today.
+                  // Burger icon added to the LEFT of the date text — same row, no layout shift.
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // "TODAY" label — always occupies space, only opacity changes
-                        Opacity(
-                          opacity: () {
-                            final now = DateTime.now();
-                            return (_selectedDate.year == now.year &&
-                                    _selectedDate.month == now.month &&
-                                    _selectedDate.day == now.day)
-                                ? 1.0
-                                : 0.0;
-                          }(),
-                          child: const Text(
-                            'TODAY',
-                            style: TextStyle(
-                              color: Colors.white38,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 2,
+                        // Burger menu icon — left of date text, purely visual
+                        GestureDetector(
+                          onTap: _openDrawer,
+                          child: const Padding(
+                            padding: EdgeInsets.only(right: 10),
+                            child: Icon(
+                              Icons.menu,
+                              color: Colors.white,
+                              size: 22,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        // Formatted date — always visible, always same position
-                        Text(
-                          _selectedDateLabel,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
+                        // Date column — unchanged in every way
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // "TODAY" label — always occupies space, only opacity changes
+                            Opacity(
+                              opacity: () {
+                                final now = DateTime.now();
+                                return (_selectedDate.year == now.year &&
+                                        _selectedDate.month == now.month &&
+                                        _selectedDate.day == now.day)
+                                    ? 1.0
+                                    : 0.0;
+                              }(),
+                              child: const Text(
+                                'TODAY',
+                                style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            // Formatted date — always visible, always same position
+                            Text(
+                              _selectedDateLabel,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -654,10 +756,10 @@ class _HabitHomePageState extends State<HabitHomePage> {
           width: 54,
           height: 54,
           decoration: const BoxDecoration(
-            color: Colors.white,
+            color: Color(0xFF2C2C2C),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.add, color: Colors.black, size: 26),
+          child: const Icon(Icons.add, color: Colors.white, size: 26),
         ),
       ),
     );
