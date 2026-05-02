@@ -128,6 +128,145 @@ class CategorySelectionScreen extends StatelessWidget {
   }
 }
 
+// ── START DATE SCREEN ──
+// Shown when user taps + on a non-Today date
+// Matches the reference image: dark card with START DATE, date, TODAY, CLOSE
+class StartDateScreen extends StatelessWidget {
+  final DateTime selectedDate;
+
+  const StartDateScreen({super.key, required this.selectedDate});
+
+  String _formatDate(DateTime date) {
+    const months = [
+      'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+      'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
+    ];
+    return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2C),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // START DATE label
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.black, width: 1),
+                  ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'START DATE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+              // Selected date
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.black, width: 1),
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    _formatDate(selectedDate),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+              // TODAY option — navigate to category screen for today
+              GestureDetector(
+                onTap: () async {
+                  // User picks TODAY as start date → go to category screen
+                  final selectedCategory = await Navigator.push<String>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CategorySelectionScreen(
+                        habitTitle: '',
+                      ),
+                    ),
+                  );
+                  if (selectedCategory != null && context.mounted) {
+                    Navigator.pop(context, {
+                      'category': selectedCategory,
+                      'startDate': 'today',
+                    });
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.black, width: 1),
+                    ),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'TODAY',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // CLOSE — dismiss without adding
+              GestureDetector(
+                onTap: () => Navigator.pop(context, null),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  child: const Center(
+                    child: Text(
+                      'CLOSE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HabitHomePage extends StatefulWidget {
   const HabitHomePage({super.key});
   @override
@@ -252,22 +391,45 @@ class _HabitHomePageState extends State<HabitHomePage> {
     });
   }
 
-  // ── Tap + → immediately navigate to CategorySelectionScreen ──
-  // No dialog. No input. Direct full page transition.
+  // ── Tap + → conditional navigation based on selected date context ──
+  // TODAY context → go directly to CategorySelectionScreen (existing behavior)
+  // NON-TODAY context → go to StartDateScreen first (new behavior)
   Future<void> _showAddDialog() async {
-    final selectedCategory = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CategorySelectionScreen(habitTitle: ''),
-      ),
-    );
-    // Add habit only if user picked a category (not BACK)
-    if (selectedCategory != null && mounted) {
-      setState(() => _habits.add(Habit(
-            id: DateTime.now().millisecondsSinceEpoch.toString(),
-            title: selectedCategory,
-            category: selectedCategory,
-          )));
+    final now = DateTime.now();
+    final isToday = _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+
+    if (isToday) {
+      // ── TODAY: existing behavior — direct to category screen ──
+      final selectedCategory = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const CategorySelectionScreen(habitTitle: ''),
+        ),
+      );
+      if (selectedCategory != null && mounted) {
+        setState(() => _habits.add(Habit(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: selectedCategory,
+              category: selectedCategory,
+            )));
+      }
+    } else {
+      // ── NON-TODAY: new behavior — show StartDateScreen first ──
+      final result = await Navigator.push<Map<String, String>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StartDateScreen(selectedDate: _selectedDate),
+        ),
+      );
+      if (result != null && mounted) {
+        setState(() => _habits.add(Habit(
+              id: DateTime.now().millisecondsSinceEpoch.toString(),
+              title: result['category'] ?? '',
+              category: result['category'] ?? '',
+            )));
+      }
     }
   }
 
