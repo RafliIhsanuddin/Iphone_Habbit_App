@@ -128,13 +128,17 @@ class CategorySelectionScreen extends StatelessWidget {
   }
 }
 
-// ── START DATE SCREEN ──
-// Shown when user taps + on a non-Today date
-// Matches the reference image: dark card with START DATE, date, TODAY, CLOSE
-class StartDateScreen extends StatelessWidget {
+// ── START DATE MODAL ──
+// Shown as an overlay on non-Today dates — stays on same page
+// Background is dimmed, card appears centered in foreground
+// Three options:
+//   1. Selected date → navigate to category screen with selectedDate as startDate
+//   2. TODAY         → navigate to category screen with today as startDate
+//   3. CLOSE         → dismiss modal, no action
+class StartDateModal extends StatelessWidget {
   final DateTime selectedDate;
 
-  const StartDateScreen({super.key, required this.selectedDate});
+  const StartDateModal({super.key, required this.selectedDate});
 
   String _formatDate(DateTime date) {
     const months = [
@@ -144,43 +148,65 @@ class StartDateScreen extends StatelessWidget {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
+  // Shared helper: navigate to category screen and return result to modal caller
+  Future<void> _navigateToCategory(BuildContext context, DateTime startDate) async {
+    final selectedCategory = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CategorySelectionScreen(habitTitle: ''),
+      ),
+    );
+    // If user picked a category, close modal and return full result
+    if (selectedCategory != null && context.mounted) {
+      Navigator.pop(context, {
+        'category': selectedCategory,
+        'startDate': startDate.toIso8601String(),
+      });
+    }
+    // If user pressed BACK on category screen, modal stays open (do nothing)
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 32),
-          decoration: BoxDecoration(
-            color: const Color(0xFF2C2C2C),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // START DATE label
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                decoration: const BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: Colors.black, width: 1),
-                  ),
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+
+            // ── START DATE label — header, not tappable ──
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              decoration: const BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: Colors.black, width: 1),
                 ),
-                child: const Center(
-                  child: Text(
-                    'START DATE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
+              ),
+              child: const Center(
+                child: Text(
+                  'START DATE',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
-              // Selected date
-              Container(
+            ),
+
+            // ── Option 1: Selected date ──
+            // Tapping navigates to category screen with selectedDate as startDate
+            GestureDetector(
+              onTap: () => _navigateToCategory(context, selectedDate),
+              child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 18),
                 decoration: const BoxDecoration(
@@ -200,67 +226,59 @@ class StartDateScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              // TODAY option — navigate to category screen for today
-              GestureDetector(
-                onTap: () async {
-                  // User picks TODAY as start date → go to category screen
-                  final selectedCategory = await Navigator.push<String>(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const CategorySelectionScreen(
-                        habitTitle: '',
-                      ),
-                    ),
-                  );
-                  if (selectedCategory != null && context.mounted) {
-                    Navigator.pop(context, {
-                      'category': selectedCategory,
-                      'startDate': 'today',
-                    });
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Colors.black, width: 1),
-                    ),
+            ),
+
+            // ── Option 2: TODAY ──
+            // Tapping navigates to category screen with today's date as startDate
+            GestureDetector(
+              onTap: () => _navigateToCategory(context, DateTime.now()),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                decoration: const BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.black, width: 1),
                   ),
-                  child: const Center(
-                    child: Text(
-                      'TODAY',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
+                ),
+                child: const Center(
+                  child: Text(
+                    'TODAY',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
               ),
-              // CLOSE — dismiss without adding
-              GestureDetector(
-                onTap: () => Navigator.pop(context, null),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  child: const Center(
-                    child: Text(
-                      'CLOSE',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
+            ),
+
+            // ── Option 3: CLOSE ──
+            // Dismisses modal only — no navigation, no state change
+            // HitTestBehavior.opaque ensures entire row registers taps
+            // including transparent/empty areas — consistent with other options
+            GestureDetector(
+              onTap: () => Navigator.pop(context, null),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                child: const Center(
+                  child: Text(
+                    'CLOSE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+
+          ],
         ),
       ),
     );
@@ -416,12 +434,14 @@ class _HabitHomePageState extends State<HabitHomePage> {
             )));
       }
     } else {
-      // ── NON-TODAY: new behavior — show StartDateScreen first ──
-      final result = await Navigator.push<Map<String, String>>(
-        context,
-        MaterialPageRoute(
-          builder: (_) => StartDateScreen(selectedDate: _selectedDate),
-        ),
+      // ── NON-TODAY: modal overlay on same screen — no navigation ──
+      // Background dims. User stays on same page. Tap outside or CLOSE to dismiss.
+      // TODAY row inside modal navigates to category screen then returns result.
+      final result = await showDialog<Map<String, String>>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.75),
+        barrierDismissible: true,
+        builder: (_) => StartDateModal(selectedDate: _selectedDate),
       );
       if (result != null && mounted) {
         setState(() => _habits.add(Habit(
