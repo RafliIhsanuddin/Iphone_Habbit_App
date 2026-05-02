@@ -28,8 +28,104 @@ class HabitApp extends StatelessWidget {
 class Habit {
   final String id;
   final String title;
+  final String category;
   bool isDone;
-  Habit({required this.id, required this.title, this.isDone = false});
+  Habit({required this.id, required this.title, this.category = '', this.isDone = false});
+}
+
+// ── CATEGORY SELECTION SCREEN ──
+// Full page — reached via Navigator.push from the habit name dialog
+// User picks a category here — returns selection to previous screen
+// BACK returns null — habit is NOT added if user goes back
+class CategorySelectionScreen extends StatelessWidget {
+  final String habitTitle;
+
+  const CategorySelectionScreen({super.key, required this.habitTitle});
+
+  static const List<String> categories = [
+    'MEDITATION',
+    'SPORT',
+    'ENTERTAINMENT',
+    'ART',
+    'STUDY',
+    'QUIT A BAD HABIT',
+    'CREATE CATEGORY',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // ── DEFINE YOUR HABIT title ──
+              const Text(
+                'DEFINE YOUR HABIT',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // ── Category list — scrollable middle section ──
+              Expanded(
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      // Tapping a category returns it to the dialog screen
+                      // which then adds the habit and closes
+                      onTap: () => Navigator.pop(context, categories[index]),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Text(
+                          categories[index],
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // ── BACK button — fixed at bottom left ──
+              // Returns null — habit NOT added
+              GestureDetector(
+                onTap: () => Navigator.pop(context, null),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: Text(
+                    'BACK',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HabitHomePage extends StatefulWidget {
@@ -156,111 +252,23 @@ class _HabitHomePageState extends State<HabitHomePage> {
     });
   }
 
-  void _showAddDialog() {
-    _controller.clear();
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: const Color(0xFF111111),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'NEW HABIT',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 3,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _controller,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                decoration: const InputDecoration(
-                  hintText: 'Habit name...',
-                  hintStyle: TextStyle(color: Colors.white38),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white24),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white24),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'CANCEL',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        if (_controller.text.trim().isNotEmpty) {
-                          setState(() => _habits.add(Habit(
-                                id: DateTime.now()
-                                    .millisecondsSinceEpoch
-                                    .toString(),
-                                title: _controller.text.trim(),
-                              )));
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'ADD',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+  // ── Tap + → immediately navigate to CategorySelectionScreen ──
+  // No dialog. No input. Direct full page transition.
+  Future<void> _showAddDialog() async {
+    final selectedCategory = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CategorySelectionScreen(habitTitle: ''),
       ),
     );
+    // Add habit only if user picked a category (not BACK)
+    if (selectedCategory != null && mounted) {
+      setState(() => _habits.add(Habit(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            title: selectedCategory,
+            category: selectedCategory,
+          )));
+    }
   }
 
   @override
