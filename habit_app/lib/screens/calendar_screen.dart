@@ -244,7 +244,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
       itemCount: _selectedHabits.length,
-      separatorBuilder: (_, _a) => const SizedBox(height: 10),
+      separatorBuilder: (_, a) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final habit = _selectedHabits[index];
         return _HabitRow(
