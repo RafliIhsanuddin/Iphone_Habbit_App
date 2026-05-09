@@ -18,7 +18,6 @@ class HabitApp extends StatelessWidget {
       );
 }
 
-// ── Models ──
 class ReminderEntry {
   String time, type, schedule;
   Set<String> weekDays;
@@ -34,7 +33,6 @@ class Habit {
   List<ReminderEntry> reminders;
   final DateTime startDate;
   final DateTime? endDate;
-  // Per-day state: 'yyyy-MM-dd' → HabitState
   final Map<String, HabitState> dailyState = {};
 
   Habit({required this.id, required this.title, this.category = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY'}) : reminders = reminders ?? [];
@@ -59,13 +57,11 @@ class HabitScheduleResult {
   HabitScheduleResult({required this.title, required this.description, required this.category, required this.startDate, required this.frequency, required this.endDate, required this.priority, required this.reminders});
 }
 
-// ── PRIORITY MODAL ──
 class _PriorityModal extends StatefulWidget {
   final int priority;
   final void Function(int) onChanged;
   const _PriorityModal({required this.priority, required this.onChanged});
-  @override
-  State<_PriorityModal> createState() => _PriorityModalState();
+  @override State<_PriorityModal> createState() => _PriorityModalState();
 }
 class _PriorityModalState extends State<_PriorityModal> {
   late int _val;
@@ -103,7 +99,6 @@ class _PriorityModalState extends State<_PriorityModal> {
   }
 }
 
-// ── TIME PICKER DIALOG ──
 class _TimePickerDialog extends StatefulWidget {
   final int initialHour, initialMinute;
   final void Function(int, int) onConfirm;
@@ -198,7 +193,6 @@ class _TimePickerDialogState extends State<_TimePickerDialog> {
   }
 }
 
-// ── REMINDERS MODAL ──
 class _RemindersModal extends StatefulWidget {
   final List<ReminderEntry> reminders;
   final void Function(List<ReminderEntry>) onChanged;
@@ -222,7 +216,7 @@ class _RemindersModalState extends State<_RemindersModal> {
       insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ClipRRect(borderRadius: BorderRadius.circular(16), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: Center(child: const Text('TIME AND REMINDERS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.5)))),
+        const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('TIME AND REMINDERS', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.5)))),
         Container(height: 0.5, color: Colors.white24),
         Flexible(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.fromLTRB(20,0,20,0), child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (_list.isEmpty) ...[const SizedBox(height:20), const Icon(Icons.notifications_off, color: Colors.white, size: 48), const SizedBox(height:8), const Text('NO REMINDERS FOR THIS ACTIVITY', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 12, letterSpacing: 0.5)), const SizedBox(height:20)]
@@ -255,7 +249,6 @@ class _RemindersModalState extends State<_RemindersModal> {
   }
 }
 
-// ── NEW/EDIT REMINDER MODAL ──
 class _NewReminderModal extends StatefulWidget {
   final void Function(ReminderEntry) onConfirm;
   final List<String> existingTimes;
@@ -344,7 +337,6 @@ class _NewReminderModalState extends State<_NewReminderModal> {
   }
 }
 
-// ── HABIT FREQUENCY SCREEN ──
 class HabitFrequencyScreen extends StatefulWidget {
   final String category,startDate,title,description;
   const HabitFrequencyScreen({super.key,required this.category,required this.startDate,required this.title,required this.description});
@@ -469,7 +461,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   }
 }
 
-// ── SCHEDULE SCREEN ──
 class _ScheduleScreen extends StatefulWidget {
   final String category,title,description,frequency,initialStartDate;
   const _ScheduleScreen({required this.category,required this.title,required this.description,required this.frequency,required this.initialStartDate});
@@ -515,7 +506,6 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
   }
 }
 
-// ── HABIT DETAIL SCREEN ──
 class HabitDetailScreen extends StatefulWidget {
   final String category,startDate;
   const HabitDetailScreen({super.key,required this.category,required this.startDate});
@@ -547,7 +537,6 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
   }
 }
 
-// ── CATEGORY SELECTION SCREEN ──
 class CategorySelectionScreen extends StatelessWidget {
   final String habitTitle,startDate;
   const CategorySelectionScreen({super.key,required this.habitTitle,this.startDate=''});
@@ -570,7 +559,6 @@ class CategorySelectionScreen extends StatelessWidget {
   }
 }
 
-// ── START DATE MODAL ──
 class StartDateModal extends StatelessWidget {
   final DateTime selectedDate;
   const StartDateModal({super.key,required this.selectedDate});
@@ -593,9 +581,6 @@ class StartDateModal extends StatelessWidget {
   }
 }
 
-// ════════════════════════════════════════════════════════════
-// ── CIRCULAR PROGRESS PAINTER ──
-// ════════════════════════════════════════════════════════════
 class _RingPainter extends CustomPainter {
   final double progress;
   _RingPainter(this.progress);
@@ -610,11 +595,6 @@ class _RingPainter extends CustomPainter {
   @override bool shouldRepaint(_RingPainter o)=>o.progress!=progress;
 }
 
-// ════════════════════════════════════════════════════════════
-// ── ANIMATED HABIT LIST ──
-// Uses Flutter AnimatedList with a Myers-diff to animate
-// each item sliding to its new position smoothly.
-// ════════════════════════════════════════════════════════════
 class _HabitAnimatedList extends StatefulWidget {
   final List<Habit> habits;
   final DateTime selectedDay;
@@ -637,12 +617,10 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
   @override
   void didUpdateWidget(_HabitAnimatedList old){
     super.didUpdateWidget(old);
-    // Always update the habit references in _cur so stateOn() is fresh
     for(int i=0;i<_cur.length;i++){
       final idx=widget.habits.indexWhere((h)=>h.id==_cur[i].id);
       if(idx!=-1)_cur[i]=widget.habits[idx];
     }
-    // Only animate if the order changed
     if(_sameOrder(_cur,widget.habits))return;
     _sync(widget.habits);
   }
@@ -655,16 +633,12 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
 
   void _sync(List<Habit> next){
     final newIds=next.map((h)=>h.id).toList();
-
-    // Step 1: Remove items no longer in next (high-to-low to keep indices valid)
     for(int i=_cur.length-1;i>=0;i--){
       if(!newIds.contains(_cur[i].id)){
         final h=_cur.removeAt(i);
         _key.currentState?.removeItem(i,(ctx,anim)=>_animated(h,anim,leaving:true),duration:_dur);
       }
     }
-
-    // Step 2: Insert brand-new items that do not exist in _cur yet
     for(int ni=0;ni<next.length;ni++){
       if(!_cur.any((h)=>h.id==next[ni].id)){
         final insertAt=ni.clamp(0,_cur.length);
@@ -672,8 +646,6 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
         _key.currentState?.insertItem(insertAt,duration:_dur);
       }
     }
-
-    // Step 3: Animate reordering — process each target position in order
     for(int ni=0;ni<newIds.length;ni++){
       final ci=_cur.indexWhere((h)=>h.id==newIds[ni]);
       if(ci==-1||ci==ni)continue;
@@ -698,7 +670,10 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
       child:GestureDetector(onTap:()=>widget.onTap(habit.id),child:Container(padding:const EdgeInsets.symmetric(vertical:16),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.white10,width:0.5))),child:Row(children:[
         Text(habit.title.toUpperCase(),style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.3)),
         if(habit.priority>1)...[const SizedBox(width:6),Text('${habit.priority}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),const SizedBox(width:2),const Icon(Icons.flag,color:Colors.white,size:14)],
+        // Reminder icon (null when earliest is 'none') + time
         if(icon!=null)...[const SizedBox(width:6),icon,if(time!=null)...[const SizedBox(width:4),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))]],
+        // Time-only: earliest reminder is 'none' type — show time but no icon
+        if(icon==null&&time!=null)...[const SizedBox(width:6),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))],
         const Spacer(),
         widget.buildStatusIcon(state),
       ]))),
@@ -706,23 +681,10 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
   }
 
   Widget _animated(Habit h,Animation<double> anim,{bool leaving=false,bool movingDown=false}){
-    // When entering: slide in from below (positive y) for items moving down in list,
-    // or from above (negative y) for items moving up.
-    // When leaving: slide out in the opposite direction.
     final double beginY=leaving?(movingDown?-0.5:0.5):(movingDown?0.5:-0.5);
     final double endY=leaving?(movingDown?-0.5:0.5):0.0;
-    final slide=Tween<Offset>(
-      begin:Offset(0,beginY),
-      end:Offset(0,endY),
-    ).animate(CurvedAnimation(parent:anim,curve:leaving?Curves.easeIn:Curves.easeOut));
-    return SizeTransition(
-      sizeFactor:anim,
-      axisAlignment:-1,
-      child:FadeTransition(
-        opacity:anim,
-        child:SlideTransition(position:slide,child:_row(h)),
-      ),
-    );
+    final slide=Tween<Offset>(begin:Offset(0,beginY),end:Offset(0,endY)).animate(CurvedAnimation(parent:anim,curve:leaving?Curves.easeIn:Curves.easeOut));
+    return SizeTransition(sizeFactor:anim,axisAlignment:-1,child:FadeTransition(opacity:anim,child:SlideTransition(position:slide,child:_row(h))));
   }
 
   @override
@@ -736,9 +698,6 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
   }
 }
 
-// ════════════════════════════════════════════════════════════
-// ── HABIT HOME PAGE ──
-// ════════════════════════════════════════════════════════════
 class HabitHomePage extends StatefulWidget {
   const HabitHomePage({super.key});
   @override State<HabitHomePage> createState() => _HabitHomePageState();
@@ -768,17 +727,14 @@ class _HabitHomePageState extends State<HabitHomePage> {
   void _fwd()=>setState(()=>_weekStart=_weekStart.add(const Duration(days:7)));
   void _pick(DateTime d)=>setState(()=>_sel=d);
 
-  // ── Per-day habit list ──
   List<Habit> _forDay(DateTime d)=>_all.where((h)=>h.isActiveOn(d)).toList();
 
-  // ── Per-day progress (independent) ──
   double _progress(DateTime day){
     final h=_forDay(day);
     if(h.isEmpty)return 0;
     return h.where((x)=>x.stateOn(day)==HabitState.done).length/h.length;
   }
 
-  // ── Sorted habits for selected day ──
   List<Habit> get _sorted{
     final h=_forDay(_sel);
     final empty=h.where((x)=>x.stateOn(_sel)==HabitState.empty).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
@@ -786,7 +742,6 @@ class _HabitHomePageState extends State<HabitHomePage> {
     return [...empty,...done];
   }
 
-  // ── Cycle per-day state ──
   void _cycle(String id){
     setState((){
       final h=_all.firstWhere((x)=>x.id==id);
@@ -796,14 +751,41 @@ class _HabitHomePageState extends State<HabitHomePage> {
   }
 
   // ── Reminder helpers ──
+  // Convert "HH:mm" to minutes for chronological sorting
   int _toMins(String t){final p=t.split(':');return(int.tryParse(p[0])??0)*60+(p.length>1?(int.tryParse(p[1])??0):0);}
-  ReminderEntry? _earliest(Habit h){final a=h.reminders.where((r)=>r.type!='none').toList();if(a.isEmpty)return null;a.sort((x,y)=>_toMins(x.time).compareTo(_toMins(y.time)));return a.first;}
-  String? _earliestTime(Habit h)=>_earliest(h)?.time;
+
+  // Find the earliest reminder across ALL entries (including 'none' type).
+  // Chronological order is the only criterion — type never overrides time.
+  ReminderEntry? _earliestAll(Habit h){
+    if(h.reminders.isEmpty)return null;
+    final sorted=List<ReminderEntry>.from(h.reminders)..sort((x,y)=>_toMins(x.time).compareTo(_toMins(y.time)));
+    return sorted.first;
+  }
+
+  // Returns the time of the earliest reminder (all types included).
+  // Returns null only when there are no reminders at all.
+  String? _earliestTime(Habit h)=>_earliestAll(h)?.time;
+
+  // Returns the icon widget for the habit row.
+  // Logic:
+  //   - No reminders                     → null (nothing shown)
+  //   - Earliest reminder type == 'none' → null (only time shown, no icon)
+  //   - Earliest type == 'alarm'         → alarm icon (single or stacked)
+  //   - Earliest type == 'notification'  → notification icon (single or stacked)
+  // Stacked style is used when there are 2+ reminders regardless of type mix.
   Widget? _reminderIcon(Habit h){
-    final a=h.reminders.where((r)=>r.type!='none').toList();if(a.isEmpty)return null;
-    final e=_earliest(h)!;final icon=e.type=='alarm'?Icons.alarm:Icons.notifications;
-    if(a.length==1)return Icon(icon,color:Colors.white,size:16);
-    return SizedBox(width:20,height:18,child:Stack(children:[Positioned(left:3,top:2,child:Icon(icon,color:Colors.white.withOpacity(0.5),size:14)),Positioned(left:0,top:0,child:Icon(icon,color:Colors.white,size:16))]));
+    if(h.reminders.isEmpty)return null;
+    final earliest=_earliestAll(h)!;
+    // Earliest is 'none' → suppress icon entirely, time still shown via _earliestTime
+    if(earliest.type=='none')return null;
+    final icon=earliest.type=='alarm'?Icons.alarm:Icons.notifications;
+    // Single reminder → single icon
+    if(h.reminders.length==1)return Icon(icon,color:Colors.white,size:16);
+    // Multiple reminders → stacked icon. clipBehavior:Clip.none prevents clipping of offset back icon.
+    return SizedBox(width:28,height:20,child:Stack(clipBehavior:Clip.none,children:[
+      Positioned(left:10,top:5,child:Icon(icon,color:Colors.white.withOpacity(0.35),size:13)),
+      Positioned(left:0,top:0,child:Icon(icon,color:Colors.white,size:18)),
+    ]));
   }
 
   Widget _statusIcon(HabitState s){
@@ -859,7 +841,6 @@ class _HabitHomePageState extends State<HabitHomePage> {
         GestureDetector(onTap:()=>Navigator.pop(context),child:const Text('HABITS',style:TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,letterSpacing:0.5))),
       ])))),
       body:SafeArea(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        // TOP BAR
         Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
           Expanded(child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
             GestureDetector(onTap:()=>_scaffoldKey.currentState?.openDrawer(),child:const Padding(padding:EdgeInsets.only(right:10),child:Icon(Icons.menu,color:Colors.white,size:22))),
@@ -871,23 +852,19 @@ class _HabitHomePageState extends State<HabitHomePage> {
           ])),
           Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),const Icon(Icons.calendar_month,color:Colors.white,size:22),const SizedBox(width:18),const Text('?',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w300))]),
         ])),
-        // HABITS TITLE
         const Center(child:Text('HABITS',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:3))),
         const SizedBox(height:20),
-        // MONTH ROW
         Padding(padding:const EdgeInsets.symmetric(horizontal:20),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
           GestureDetector(onTap:_prevMonth,child:const Padding(padding:EdgeInsets.all(8),child:Icon(Icons.chevron_left,color:Colors.white,size:28))),
           Text(_monthName,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,letterSpacing:2)),
           GestureDetector(onTap:_nextMonth,child:const Padding(padding:EdgeInsets.all(8),child:Icon(Icons.chevron_right,color:Colors.white,size:28))),
         ])),
         const SizedBox(height:16),
-        // 7-DAY STRIP with per-day progress rings
         Padding(padding:const EdgeInsets.symmetric(horizontal:8),child:Row(children:[
           GestureDetector(onTap:_back,child:const Padding(padding:EdgeInsets.all(8),child:Icon(Icons.chevron_left,color:Colors.white54,size:22))),
           Expanded(child:Row(mainAxisAlignment:MainAxisAlignment.spaceAround,children:List.generate(7,(i){
             final day=week[i];
             final isSel=day.year==_sel.year&&day.month==_sel.month&&day.day==_sel.day;
-            // Per-day progress — fully independent
             final prog=_progress(day);
             return GestureDetector(onTap:()=>_pick(day),child:Column(mainAxisSize:MainAxisSize.min,children:[
               Text(dlabels[i],style:TextStyle(color:isSel?Colors.white:Colors.white38,fontSize:12,fontWeight:FontWeight.w500,letterSpacing:0.5)),
@@ -904,7 +881,6 @@ class _HabitHomePageState extends State<HabitHomePage> {
         ])),
         const SizedBox(height:24),
         Container(height:0.5,color:Colors.white12),
-        // HABIT LIST
         Expanded(child:sorted.isEmpty
           ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[Container(width:56,height:56,decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(color:Colors.white12)),child:const Icon(Icons.add,color:Colors.white24,size:28)),const SizedBox(height:16),const Text('NO HABITS YET',style:TextStyle(color:Colors.white24,fontSize:12,letterSpacing:3,fontWeight:FontWeight.w600)),const SizedBox(height:6),const Text('Tap + to add your first habit',style:TextStyle(color:Colors.white24,fontSize:12))]))
           :_HabitAnimatedList(
