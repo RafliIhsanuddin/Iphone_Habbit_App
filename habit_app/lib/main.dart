@@ -57,6 +57,7 @@ class HabitScheduleResult {
   HabitScheduleResult({required this.title, required this.description, required this.category, required this.startDate, required this.frequency, required this.endDate, required this.priority, required this.reminders});
 }
 
+// FIX 4: Priority modal — entire plus/minus container is tappable
 class _PriorityModal extends StatefulWidget {
   final int priority;
   final void Function(int) onChanged;
@@ -82,17 +83,29 @@ class _PriorityModalState extends State<_PriorityModal> {
             child: Container(
               decoration: BoxDecoration(color: const Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white24, width: 1.5)),
               child: IntrinsicHeight(child: Row(children: [
-                Expanded(child: GestureDetector(onTap: () => setState(() { if (_val > 1) _val--; }), child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: Color(0xFF888888), shape: BoxShape.circle), child: const Icon(Icons.remove, color: Colors.white, size: 20)))))),
+                // FIX 4: entire left section is tappable (minus)
+                Expanded(child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() { if (_val > 1) _val--; }),
+                  child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: Color(0xFF888888), shape: BoxShape.circle), child: const Icon(Icons.remove, color: Colors.white, size: 20)))))),
                 Container(width: 1.5, color: Colors.white24),
                 Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('$_val', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800))))),
                 Container(width: 1.5, color: Colors.white24),
-                Expanded(child: GestureDetector(onTap: () => setState(() => _val++), child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: Color(0xFF888888), shape: BoxShape.circle), child: const Icon(Icons.add, color: Colors.white, size: 20)))))),
+                // FIX 4: entire right section is tappable (plus)
+                Expanded(child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => setState(() => _val++),
+                  child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Container(width: 36, height: 36, decoration: const BoxDecoration(color: Color(0xFF888888), shape: BoxShape.circle), child: const Icon(Icons.add, color: Colors.white, size: 20)))))),
               ])),
             ),
           ),
           Padding(padding: const EdgeInsets.only(bottom: 20), child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7), decoration: BoxDecoration(color: const Color(0xFF888888), borderRadius: BorderRadius.circular(20)), child: const Text('DEFAULT = 1 🏳', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)))),
           Container(height: 0.5, color: Colors.white24),
-          GestureDetector(onTap: () { widget.onChanged(_val); Navigator.pop(context); }, child: const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('CLOSE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))))),
+          IntrinsicHeight(child:Row(children:[
+            Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:(){Navigator.pop(context);},child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:16),child:const Center(child:Text('CLOSE',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+            Container(width:0.5,color:Colors.white24),
+            Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:(){widget.onChanged(_val);Navigator.pop(context);},child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:16),child:const Center(child:Text('OK',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+          ])),
         ]),
       ),
     );
@@ -182,17 +195,18 @@ class _TimePickerDialogState extends State<_TimePickerDialog> {
             _box(_mCtrl,'MINUTES',()=>setState(()=>_setMinute(_minute+1)),()=>setState(()=>_setMinute(_minute-1)),_onMinChanged,_finalM),
           ])),
         const SizedBox(height: 16),
-        Container(height: 0.5, color: Colors.white24),
+        Container(height: 1, color: Colors.white38),
         IntrinsicHeight(child: Row(children: [
-          Expanded(child: GestureDetector(onTap: ()=>Navigator.pop(context), child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
-          Container(width: 0.5, color: Colors.white24),
-          Expanded(child: GestureDetector(onTap: (){_finalH();_finalM();widget.onConfirm(_hour,_minute);Navigator.pop(context);}, child: const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: ()=>Navigator.pop(context), child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+          Container(width: 1, color: Colors.white38),
+          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: (){_finalH();_finalM();widget.onConfirm(_hour,_minute);Navigator.pop(context);}, child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
         ])),
       ]),
     );
   }
 }
 
+// FIX 3: "New Reminder" row has full-width tap area
 class _RemindersModal extends StatefulWidget {
   final List<ReminderEntry> reminders;
   final void Function(List<ReminderEntry>) onChanged;
@@ -240,10 +254,23 @@ class _RemindersModalState extends State<_RemindersModal> {
             }),
             const SizedBox(height:4),
           ],
-          Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: GestureDetector(onTap: _add, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.add_circle_outline,color:Colors.white,size:18),SizedBox(width:6),Text('NEW REMINDER',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700,letterSpacing:0.5))]))),
+          // FIX 3: entire row is tappable via GestureDetector with HitTestBehavior.opaque
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _add,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+                Icon(Icons.add_circle_outline, color: Colors.white, size: 18),
+                SizedBox(width: 6),
+                Text('NEW REMINDER', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              ]),
+            ),
+          ),
         ])))),
         Container(height: 0.5, color: Colors.white24),
-        GestureDetector(onTap: (){widget.onChanged(_list);Navigator.pop(context);}, child: const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text('CLOSE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5))))),
+        GestureDetector(behavior:HitTestBehavior.opaque,onTap: (){widget.onChanged(_list);Navigator.pop(context);}, child: Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical: 16),child:Center(child: Text('CLOSE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5))))),
       ])),
     );
   }
@@ -254,7 +281,7 @@ class _NewReminderModal extends StatefulWidget {
   final List<String> existingTimes;
   final ReminderEntry? initialEntry;
   final String title;
-  const _NewReminderModal({required this.onConfirm, this.existingTimes=const[], this.initialEntry, this.title='NEW REMINDERS'});
+  const _NewReminderModal({required this.onConfirm, this.existingTimes=const[], this.initialEntry, this.title='NEW REMINDER'});
   @override State<_NewReminderModal> createState() => _NewReminderModalState();
 }
 class _NewReminderModalState extends State<_NewReminderModal> {
@@ -323,20 +350,22 @@ class _NewReminderModalState extends State<_NewReminderModal> {
         ])),
         Container(height:0.5,color:Colors.white24),
         IntrinsicHeight(child:Row(children:[
-          Expanded(child:GestureDetector(onTap:()=>Navigator.pop(context),child:const Padding(padding:EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CANCEL',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+          Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>Navigator.pop(context),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CANCEL',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
           Container(width:0.5,color:Colors.white24),
-          Expanded(child:GestureDetector(onTap:(){
+          Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:(){
             final t=_tCtrl.text.trim();
             if(widget.existingTimes.contains(t)){showDialog(context:context,builder:(_)=>AlertDialog(backgroundColor:const Color(0xFF2C2C2C),title:const Text('Duplicate Reminder',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),content:const Text('A reminder already exists at that time',style:TextStyle(color:Colors.white70,fontSize:13)),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('OK',style:TextStyle(color:Colors.white)))]));return;}
             widget.onConfirm(ReminderEntry(time:t,type:_type,schedule:_schedule,weekDays:Set.from(_weekDays),daysBefore:int.tryParse(_dbCtrl.text)??1));
             Navigator.pop(context);
-          },child:const Padding(padding:EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CONFIRM',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+          },child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CONFIRM',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
         ])),
       ])),
     );
   }
 }
 
+// FIX 1: Reset all frequency option data on switch
+// FIX 2: Specific days of the year: initial plus button, max 4 visible rows, scroll
 class HabitFrequencyScreen extends StatefulWidget {
   final String category,startDate,title,description;
   const HabitFrequencyScreen({super.key,required this.category,required this.startDate,required this.title,required this.description});
@@ -344,18 +373,41 @@ class HabitFrequencyScreen extends StatefulWidget {
 }
 class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   String _sel='EVERY DAY';
-  final Map<String,bool> _wDays={'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
-  final Set<int> _mDays={};
-  final List<DateTime> _yDays=[];
+  // FIX 1: These are reset each time the user switches to another option
+  Map<String,bool> _wDays={'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
+  Set<int> _mDays={};
+  List<DateTime> _yDays=[];
+  // FIX 2: show the year picker inline (no initial rows, only a plus button)
   bool _showYPicker=false;
+  // DATE PICKER VALIDATION: track whether user has explicitly selected month and day
+  bool _monthPicked=false, _dayPicked=false;
   int _pMonth=DateTime.now().month,_pDay=DateTime.now().day,_periodDays=1,_repeatEvery=1;
   String _periodUnit='WEEK';
   bool _showPDrop=false;
   static const _mNames=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
 
+  // FIX 1: Reset all sub-state when switching frequency option
+  void _selectOption(String opt) {
+    setState(() {
+      _sel = opt;
+      _showYPicker = false;
+      _showPDrop = false;
+      // Reset all sub-states
+      _wDays = {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
+      _mDays = {};
+      _yDays = [];
+      _periodDays = 1;
+      _repeatEvery = 1;
+      _periodUnit = 'WEEK';
+      // Reset date picker validation flags
+      _monthPicked = false;
+      _dayPicked = false;
+    });
+  }
+
   Widget _radio(String opt){
     final sel=_sel==opt;
-    return GestureDetector(onTap:()=>setState((){_sel=opt;_showYPicker=false;_showPDrop=false;}),child:Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
+    return GestureDetector(onTap:()=>_selectOption(opt),child:Padding(padding:const EdgeInsets.symmetric(vertical:10),child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
       Container(width:22,height:22,decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(color:Colors.white,width:2),color:sel?Colors.white:Colors.transparent),child:sel?Center(child:Container(width:8,height:8,decoration:const BoxDecoration(shape:BoxShape.circle,color:Colors.black))):null),
       const SizedBox(width:12),
       Text(opt,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.3,decoration:TextDecoration.none)),
@@ -389,21 +441,188 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
     return Column(crossAxisAlignment:CrossAxisAlignment.start,children:rows);
   }
 
+  // FIX 2: Year days UI — initial state shows only a plus button,
+  // adding creates rows, max 4 visible at once with scroll, plus button floats right
+  // DATE PICKER VALIDATION: month and day must both be explicitly selected
   Widget _yDaysUI(){
-    return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      ..._yDays.asMap().entries.map((e){final i=e.key;final d=e.value;return Padding(padding:const EdgeInsets.only(left:32,bottom:8),child:Row(children:[Text('${_mNames[d.month-1]} ${d.day}',style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.3)),const Spacer(),GestureDetector(onTap:()=>setState(()=>_yDays.removeAt(i)),child:const Icon(Icons.delete_outline,color:Colors.white,size:20)),const SizedBox(width:12),GestureDetector(onTap:()=>setState((){_pMonth=DateTime.now().month;_pDay=DateTime.now().day;_showYPicker=true;}),child:const Icon(Icons.add,color:Colors.white,size:20))]));},),
-      if(_yDays.isEmpty)Padding(padding:const EdgeInsets.only(left:32,bottom:8),child:GestureDetector(onTap:()=>setState((){_pMonth=DateTime.now().month;_pDay=DateTime.now().day;_showYPicker=true;}),child:const Row(children:[Text('SELECT AT LEAST ONE DAY',style:TextStyle(color:Colors.white38,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.5)),SizedBox(width:8),Icon(Icons.add,color:Colors.white,size:18)]))),
-      if(_showYPicker)Container(margin:const EdgeInsets.only(left:32,top:4,bottom:8),decoration:BoxDecoration(color:const Color(0xFF2C2C2C),borderRadius:BorderRadius.circular(12)),padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        const Center(child:Text('SELECT A DATE',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700,letterSpacing:1))),
-        const SizedBox(height:12),
-        SizedBox(height:100,child:Row(children:[
-          Expanded(flex:2,child:ListWheelScrollView.useDelegate(itemExtent:32,physics:const FixedExtentScrollPhysics(),onSelectedItemChanged:(i)=>setState(()=>_pMonth=i+1),childDelegate:ListWheelChildBuilderDelegate(builder:(c,i)=>Center(child:Text(_mNames[i],style:TextStyle(color:_pMonth==i+1?Colors.white:Colors.white38,fontSize:14,fontWeight:_pMonth==i+1?FontWeight.w700:FontWeight.w400))),childCount:12))),
-          const SizedBox(width:8),
-          Expanded(child:ListWheelScrollView.useDelegate(itemExtent:32,physics:const FixedExtentScrollPhysics(),onSelectedItemChanged:(i)=>setState(()=>_pDay=i+1),childDelegate:ListWheelChildBuilderDelegate(builder:(c,i)=>Center(child:Text('${i+1}',style:TextStyle(color:_pDay==i+1?Colors.white:Colors.white38,fontSize:14,fontWeight:_pDay==i+1?FontWeight.w700:FontWeight.w400))),childCount:31))),
-        ])),
-        const SizedBox(height:12),
-        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[GestureDetector(onTap:()=>setState(()=>_showYPicker=false),child:const Text('CANCEL',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700))),GestureDetector(onTap:()=>setState((){_yDays.add(DateTime(2000,_pMonth,_pDay));_showYPicker=false;}),child:const Text('OK',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))]),
-      ])),
+    const double rowH = 44.0;
+    const int maxVisible = 4;
+
+    Widget plusBtn = GestureDetector(
+      onTap: () => setState(() {
+        _pMonth = DateTime.now().month;
+        _pDay = DateTime.now().day;
+        // Reset validation flags when opening the picker fresh
+        _monthPicked = false;
+        _dayPicked = false;
+        _showYPicker = true;
+      }),
+      child: Container(
+        width: 36, height: 36,
+        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+        child: const Icon(Icons.add, color: Colors.black, size: 20),
+      ),
+    );
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (_yDays.isEmpty)
+        Padding(
+          padding: const EdgeInsets.only(left: 32, bottom: 8),
+          child: Row(children: [
+            Text('SELECT AT LEAST ONE DAY', style: const TextStyle(color: Colors.white38, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+            const SizedBox(width: 8),
+            plusBtn,
+          ]),
+        )
+      else
+         SizedBox(
+          height: _yDays.length > maxVisible ? rowH * maxVisible : rowH * _yDays.length,
+           child: Row(children: [
+            Expanded(
+              child: ScrollbarTheme(
+                data: ScrollbarThemeData(
+                  thumbColor: WidgetStateProperty.all(Colors.white70),
+                  trackColor: WidgetStateProperty.all(Colors.white24),
+                  trackBorderColor: WidgetStateProperty.all(Colors.transparent),
+                  thickness: WidgetStateProperty.all(4),
+                  radius: const Radius.circular(2),
+                  thumbVisibility: WidgetStateProperty.all(true),
+                  trackVisibility: WidgetStateProperty.all(true),
+                ),
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  trackVisibility: true,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.only(left: 32, right: 12),
+                    itemCount: _yDays.length,
+                    itemExtent: rowH,
+                    itemBuilder: (ctx, i) {
+                      final d = _yDays[i];
+                      return SizedBox(
+                        height: rowH,
+                        child: Row(children: [
+                          Text('${_mNames[d.month-1]} ${d.day}', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: () => setState(() => _yDays.removeAt(i)),
+                            child: const Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                          ),
+                        ]),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Center(child: plusBtn),
+          ]),
+        ),
+
+      if (_showYPicker)
+        Container(
+          margin: const EdgeInsets.only(left: 32, top: 8, bottom: 8),
+          decoration: BoxDecoration(color: const Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(12)),
+          padding: EdgeInsets.zero,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Center(child: Text('SELECT A DATE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1))),
+                const SizedBox(height: 12),
+                SizedBox(height: 100, child: Row(children: [
+                  // MONTH wheel: sets _monthPicked=true on interaction, highlights only when picked
+                  Expanded(flex: 2, child: ListWheelScrollView.useDelegate(
+                    itemExtent: 32,
+                    physics: const FixedExtentScrollPhysics(),
+                    onSelectedItemChanged: (i) => setState(() {
+                      _pMonth = i + 1;
+                      _monthPicked = true;
+                    }),
+                    childDelegate: ListWheelChildBuilderDelegate(
+                      builder: (c, i) => Center(child: Text(
+                        _mNames[i],
+                        style: TextStyle(
+                          color: (_monthPicked && _pMonth == i + 1) ? Colors.white : Colors.white38,
+                          fontSize: 14,
+                          fontWeight: (_monthPicked && _pMonth == i + 1) ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      )),
+                      childCount: 12,
+                    ),
+                  )),
+                  const SizedBox(width: 8),
+                  // DAY wheel: sets _dayPicked=true on interaction, highlights only when picked
+                  Expanded(child: ListWheelScrollView.useDelegate(
+                    itemExtent: 32,
+                    physics: const FixedExtentScrollPhysics(),
+                    onSelectedItemChanged: (i) => setState(() {
+                      _pDay = i + 1;
+                      _dayPicked = true;
+                    }),
+                    childDelegate: ListWheelChildBuilderDelegate(
+                      builder: (c, i) => Center(child: Text(
+                        '${i + 1}',
+                        style: TextStyle(
+                          color: (_dayPicked && _pDay == i + 1) ? Colors.white : Colors.white38,
+                          fontSize: 14,
+                          fontWeight: (_dayPicked && _pDay == i + 1) ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      )),
+                      childCount: 31,
+                    ),
+                  )),
+                ])),
+                const SizedBox(height: 12),
+              ]),
+            ),
+            Container(height: 1, color: Colors.white24),
+            IntrinsicHeight(child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Expanded(child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() {
+                  _showYPicker = false;
+                  _monthPicked = false;
+                  _dayPicked = false;
+                }),
+                child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('CANCEL', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+              )),
+              Container(width: 1, color: Colors.white24),
+              Expanded(child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  // VALIDATION: both month and day must be explicitly selected
+                  if (!_monthPicked || !_dayPicked) {
+                    showDialog(context: context, builder: (_) => AlertDialog(
+                      backgroundColor: const Color(0xFF2C2C2C),
+                      title: const Text('Select at least one day', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK', style: TextStyle(color: Colors.white)))],
+                    ));
+                    return;
+                  }
+                  final newDate = DateTime(2000, _pMonth, _pDay);
+                  final isDuplicate = _yDays.any((d) => d.month == newDate.month && d.day == newDate.day);
+                  if (isDuplicate) {
+                    showDialog(context: context, builder: (_) => AlertDialog(
+                      backgroundColor: const Color(0xFF2C2C2C),
+                      title: const Text('Duplicate Date', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                      content: Text('${_mNames[_pMonth - 1]} $_pDay already exists and cannot be added again.', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK', style: TextStyle(color: Colors.white)))],
+                    ));
+                  } else {
+                    setState(() {
+                      _yDays.add(newDate);
+                      _showYPicker = false;
+                      _monthPicked = false;
+                      _dayPicked = false;
+                    });
+                  }
+                },
+                child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('OK', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+              )),
+            ])),
+          ]),
+        ),
     ]);
   }
 
@@ -519,9 +738,9 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     return Scaffold(backgroundColor:Colors.black,body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,32,24,24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('DEFINE YOUR HABIT',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:1)),
       const SizedBox(height:40),
-      TextField(controller:_n,autofocus:true,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'HABIT',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
+      TextField(controller:_n,autofocus:true,textCapitalization:TextCapitalization.characters,onChanged:(v){final u=v.toUpperCase();if(v!=u){_n.value=TextEditingValue(text:u,selection:TextSelection.collapsed(offset:u.length));}},style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'HABIT',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
       const SizedBox(height:28),
-      TextField(controller:_d,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'DESCRIPTION (OPTIONAL)',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
+      TextField(controller:_d,textCapitalization:TextCapitalization.characters,onChanged:(v){final u=v.toUpperCase();if(v!=u){_d.value=TextEditingValue(text:u,selection:TextSelection.collapsed(offset:u.length));}},style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'DESCRIPTION (OPTIONAL)',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
       const Spacer(),
       Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
         GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
@@ -670,9 +889,7 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
       child:GestureDetector(onTap:()=>widget.onTap(habit.id),child:Container(padding:const EdgeInsets.symmetric(vertical:16),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.white10,width:0.5))),child:Row(children:[
         Text(habit.title.toUpperCase(),style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.3)),
         if(habit.priority>1)...[const SizedBox(width:6),Text('${habit.priority}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),const SizedBox(width:2),const Icon(Icons.flag,color:Colors.white,size:14)],
-        // Reminder icon (null when earliest is 'none') + time
         if(icon!=null)...[const SizedBox(width:6),icon,if(time!=null)...[const SizedBox(width:4),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))]],
-        // Time-only: earliest reminder is 'none' type — show time but no icon
         if(icon==null&&time!=null)...[const SizedBox(width:6),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))],
         const Spacer(),
         widget.buildStatusIcon(state),
@@ -750,40 +967,21 @@ class _HabitHomePageState extends State<HabitHomePage> {
     });
   }
 
-  // ── Reminder helpers ──
-  // Convert "HH:mm" to minutes for chronological sorting
   int _toMins(String t){final p=t.split(':');return(int.tryParse(p[0])??0)*60+(p.length>1?(int.tryParse(p[1])??0):0);}
-
-  // Find the earliest reminder across ALL entries (including 'none' type).
-  // Chronological order is the only criterion — type never overrides time.
   ReminderEntry? _earliestAll(Habit h){
     if(h.reminders.isEmpty)return null;
     final sorted=List<ReminderEntry>.from(h.reminders)..sort((x,y)=>_toMins(x.time).compareTo(_toMins(y.time)));
     return sorted.first;
   }
-
-  // Returns the time of the earliest reminder (all types included).
-  // Returns null only when there are no reminders at all.
   String? _earliestTime(Habit h)=>_earliestAll(h)?.time;
-
-  // Returns the icon widget for the habit row.
-  // Logic:
-  //   - No reminders                     → null (nothing shown)
-  //   - Earliest reminder type == 'none' → null (only time shown, no icon)
-  //   - Earliest type == 'alarm'         → alarm icon (single or stacked)
-  //   - Earliest type == 'notification'  → notification icon (single or stacked)
-  // Stacked style is used when there are 2+ reminders regardless of type mix.
   Widget? _reminderIcon(Habit h){
     if(h.reminders.isEmpty)return null;
     final earliest=_earliestAll(h)!;
-    // Earliest is 'none' → suppress icon entirely, time still shown via _earliestTime
     if(earliest.type=='none')return null;
     final icon=earliest.type=='alarm'?Icons.alarm:Icons.notifications;
-    // Single reminder → single icon
     if(h.reminders.length==1)return Icon(icon,color:Colors.white,size:16);
-    // Multiple reminders → stacked icon. clipBehavior:Clip.none prevents clipping of offset back icon.
-    return SizedBox(width:28,height:20,child:Stack(clipBehavior:Clip.none,children:[
-      Positioned(left:10,top:5,child:Icon(icon,color:Colors.white.withOpacity(0.35),size:13)),
+    return SizedBox(width:26,height:18,child:Stack(clipBehavior:Clip.none,children:[
+      Positioned(left:-6,top:3,child:Icon(icon,color:Colors.white.withOpacity(0.75),size:14)),
       Positioned(left:0,top:0,child:Icon(icon,color:Colors.white,size:18)),
     ]));
   }
