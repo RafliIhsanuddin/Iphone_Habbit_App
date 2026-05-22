@@ -31,15 +31,26 @@ class ReminderEntry {
 enum HabitState { empty, done, failed, skipped }
 
 class Habit {
-  final String id, title, category, frequency, description;
+  final String id, title, category, description;
+  String frequency;
   int priority;
   List<ReminderEntry> reminders;
   final DateTime startDate;
   DateTime? endDate;
   final Map<String, HabitState> dailyState = {};
   final Map<String, String> dailyNote = {};
+  Map<String,bool> freqWeekDays;
+  Set<int> freqMonthDays;
+  List<DateTime> freqYearDays;
+  int freqPeriodDays;
+  String freqPeriodUnit;
+  int freqRepeatEvery;
 
-  Habit({required this.id, required this.title, this.category = '', this.description = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY'}) : reminders = reminders ?? [];
+  Habit({required this.id, required this.title, this.category = '', this.description = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY', Map<String,bool>? freqWeekDays, Set<int>? freqMonthDays, List<DateTime>? freqYearDays, this.freqPeriodDays = 1, this.freqPeriodUnit = 'WEEK', this.freqRepeatEvery = 1})
+      : reminders = reminders ?? [],
+        freqWeekDays = freqWeekDays ?? {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false},
+        freqMonthDays = freqMonthDays ?? {},
+        freqYearDays = freqYearDays ?? [];
 
   static String _key(DateTime d) => '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
 
@@ -60,7 +71,16 @@ class HabitScheduleResult {
   final String title, description, category, startDate, frequency, endDate;
   final int priority;
   final List<ReminderEntry> reminders;
-  HabitScheduleResult({required this.title, required this.description, required this.category, required this.startDate, required this.frequency, required this.endDate, required this.priority, required this.reminders});
+  final Map<String,bool> freqWeekDays;
+  final Set<int> freqMonthDays;
+  final List<DateTime> freqYearDays;
+  final int freqPeriodDays;
+  final String freqPeriodUnit;
+  final int freqRepeatEvery;
+  HabitScheduleResult({required this.title, required this.description, required this.category, required this.startDate, required this.frequency, required this.endDate, required this.priority, required this.reminders, Map<String,bool>? freqWeekDays, Set<int>? freqMonthDays, List<DateTime>? freqYearDays, this.freqPeriodDays=1, this.freqPeriodUnit='WEEK', this.freqRepeatEvery=1})
+      : freqWeekDays = freqWeekDays ?? {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false},
+        freqMonthDays = freqMonthDays ?? {},
+        freqYearDays = freqYearDays ?? [];
 }
 
 // ─── Clock Hands Painter ──────────────────────────────────────────────────────
@@ -720,6 +740,80 @@ class _HabitNameEditDialogState extends State<_HabitNameEditDialog> {
   }
 }
 
+class _DescriptionEditDialog extends StatefulWidget {
+  final String initialDescription;
+  final void Function(String) onConfirm;
+  const _DescriptionEditDialog({required this.initialDescription, required this.onConfirm});
+  @override State<_DescriptionEditDialog> createState() => _DescriptionEditDialogState();
+}
+class _DescriptionEditDialogState extends State<_DescriptionEditDialog> {
+  late TextEditingController _ctrl;
+  @override void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialDescription); }
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Center(child: Text('DESCRIPTION', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white24, width: 1),
+              ),
+              child: TextField(
+                controller: _ctrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (v) {
+                  final u = v.toUpperCase();
+                  if (v != u) {
+                    _ctrl.value = TextEditingValue(text: u, selection: TextSelection.collapsed(offset: u.length));
+                  }
+                },
+                maxLines: 4,
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          IntrinsicHeight(child: Row(children: [
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+            )),
+            Container(width: 0.5, color: Colors.white24),
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                widget.onConfirm(_ctrl.text.trim());
+                Navigator.pop(context);
+              },
+              child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+            )),
+          ])),
+        ]),
+      ),
+    );
+  }
+}
 
 class _CategorySelectDialog extends StatefulWidget {
   final void Function(String) onSelected;
@@ -851,6 +945,18 @@ class _CategorySelectDialogState extends State<_CategorySelectDialog> {
 }
 
 
+class _FrequencyEditResult {
+  final String frequency;
+  final Map<String,bool> weekDays;
+  final Set<int> monthDays;
+  final List<DateTime> yearDays;
+  final int periodDays;
+  final String periodUnit;
+  final int repeatEvery;
+  _FrequencyEditResult({required this.frequency,required this.weekDays,required this.monthDays,required this.yearDays,required this.periodDays,required this.periodUnit,required this.repeatEvery});
+}
+
+
 // ─── Edit Habit Screen ────────────────────────────────────────────────────────
 
 class EditHabitScreen extends StatefulWidget {
@@ -866,12 +972,30 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
   bool _editSelected = true;
   String _habitTitle = '';
   String _category = '';
+  String _description = '';
+  late String _frequency;
+  late List<ReminderEntry> _reminders;
+  Map<String,bool> _savedWeekDays = {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
+  Set<int> _savedMonthDays = {};
+  List<DateTime> _savedYearDays = [];
+  int _savedPeriodDays = 1;
+  String _savedPeriodUnit = 'WEEK';
+  int _savedRepeatEvery = 1;
 
   @override
   void initState() {
     super.initState();
     _habitTitle = widget.habit.title;
     _category = widget.habit.category;
+    _description = widget.habit.description;
+    _frequency = widget.habit.frequency;
+    _reminders = List.from(widget.habit.reminders);
+    _savedWeekDays = Map.from(widget.habit.freqWeekDays);
+    _savedMonthDays = Set.from(widget.habit.freqMonthDays);
+    _savedYearDays = List.from(widget.habit.freqYearDays);
+    _savedPeriodDays = widget.habit.freqPeriodDays;
+    _savedPeriodUnit = widget.habit.freqPeriodUnit;
+    _savedRepeatEvery = widget.habit.freqRepeatEvery;
   }
 
   static const _monthNames = [
@@ -1160,8 +1284,6 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
     );
   }
 
-
-
   void _selectCategory() {
     showDialog(
       context: context,
@@ -1172,6 +1294,91 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
     );
   }
 
+  void _editDescription() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _DescriptionEditDialog(
+        initialDescription: _description,
+        onConfirm: (newDesc) {
+          setState(() {
+            _description = newDesc;
+          });
+        },
+      ),
+    );
+  }
+
+  void _showReminders() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _RemindersModal(
+        reminders: _reminders,
+        onChanged: (updated) {
+          setState(() {
+            _reminders = updated;
+            widget.habit.reminders
+              ..clear()
+              ..addAll(updated);
+          });
+        },
+      ),
+    );
+  }
+
+  void _showPriorityModal() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _PriorityModal(
+        priority: widget.habit.priority,
+        onChanged: (v) => setState(() => widget.habit.priority = v),
+      ),
+    );
+  }
+
+
+  void _editFrequency() async {
+    final result = await Navigator.push<_FrequencyEditResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HabitFrequencyScreen(
+          category: widget.habit.category,
+          startDate: widget.habit.startDate.toIso8601String(),
+          title: widget.habit.title,
+          description: widget.habit.description,
+          initialFrequency: _frequency,
+          editMode: true,
+          initialWeekDays: _savedWeekDays,
+          initialMonthDays: _savedMonthDays,
+          initialYearDays: _savedYearDays,
+          initialPeriodDays: _savedPeriodDays,
+          initialPeriodUnit: _savedPeriodUnit,
+          initialRepeatEvery: _savedRepeatEvery,
+        ),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _frequency = result.frequency;
+        _savedWeekDays = result.weekDays;
+        _savedMonthDays = result.monthDays;
+        _savedYearDays = result.yearDays;
+        _savedPeriodDays = result.periodDays;
+        _savedPeriodUnit = result.periodUnit;
+        _savedRepeatEvery = result.repeatEvery;
+        // Write back to the habit model so it persists across navigation
+        widget.habit.frequency = result.frequency;
+        widget.habit.freqWeekDays = Map.from(result.weekDays);
+        widget.habit.freqMonthDays = Set.from(result.monthDays);
+        widget.habit.freqYearDays = List.from(result.yearDays);
+        widget.habit.freqPeriodDays = result.periodDays;
+        widget.habit.freqPeriodUnit = result.periodUnit;
+        widget.habit.freqRepeatEvery = result.repeatEvery;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1306,9 +1513,11 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                     _buildDivider(),
 
                     // 5. DESCRIPTION
+                    // 5. DESCRIPTION
                     _buildRow(
                       label: 'DESCRIPTION',
-                      right: _buildValueText(habit.description.isEmpty ? '—' : habit.description),
+                      right: _buildValueText(_description.isEmpty ? '—' : _description),
+                      onTap: _editDescription,
                     ),
                     _buildDivider(),
 
@@ -1324,7 +1533,7 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                         ),
                         child: Center(
                           child: Text(
-                            '${habit.reminders.length}',
+                            '${_reminders.length}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 14,
@@ -1333,6 +1542,7 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                           ),
                         ),
                       ),
+                      onTap: _showReminders,
                     ),
                     _buildDivider(),
 
@@ -1368,13 +1578,15 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                                 ),
                               ],
                             ),
+                      onTap: _showPriorityModal,
                     ),
                     _buildDivider(),
 
                     // 8. FREQUENCY
                     _buildRow(
                       label: 'FREQUENCY',
-                      right: _buildValueText(_formatFrequency(habit.frequency)),
+                      right: _buildValueText(_formatFrequency(_frequency)),
+                      onTap: _editFrequency,
                     ),
                     _buildDivider(),
 
@@ -1620,6 +1832,8 @@ class _HabitBottomSheetState extends State<_HabitBottomSheet> {
     return times.join(' • ');
   }
 
+  
+
   @override
   Widget build(BuildContext context) {
     final habit = widget.habit;
@@ -1754,9 +1968,18 @@ class _HabitBottomSheetState extends State<_HabitBottomSheet> {
 
 class HabitFrequencyScreen extends StatefulWidget {
   final String category,startDate,title,description;
-  const HabitFrequencyScreen({super.key,required this.category,required this.startDate,required this.title,required this.description});
+  final String? initialFrequency;
+  final bool editMode;
+  final Map<String,bool>? initialWeekDays;
+  final Set<int>? initialMonthDays;
+  final List<DateTime>? initialYearDays;
+  final int? initialPeriodDays;
+  final String? initialPeriodUnit;
+  final int? initialRepeatEvery;
+  const HabitFrequencyScreen({super.key,required this.category,required this.startDate,required this.title,required this.description,this.initialFrequency,this.editMode=false,this.initialWeekDays,this.initialMonthDays,this.initialYearDays,this.initialPeriodDays,this.initialPeriodUnit,this.initialRepeatEvery});
   @override State<HabitFrequencyScreen> createState() => _HabitFrequencyScreenState();
 }
+
 class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   String _sel='EVERY DAY';
   Map<String,bool> _wDays={'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
@@ -1769,17 +1992,37 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   bool _showPDrop=false;
   static const _mNames=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialFrequency != null && widget.initialFrequency!.isNotEmpty) {
+      _sel = widget.initialFrequency!;
+    }
+    if (widget.initialWeekDays != null) {
+      _wDays = Map.from(widget.initialWeekDays!);
+    }
+    if (widget.initialMonthDays != null) {
+      _mDays = Set.from(widget.initialMonthDays!);
+    }
+    if (widget.initialYearDays != null) {
+      _yDays = List.from(widget.initialYearDays!);
+    }
+    if (widget.initialPeriodDays != null) {
+      _periodDays = widget.initialPeriodDays!;
+    }
+    if (widget.initialPeriodUnit != null) {
+      _periodUnit = widget.initialPeriodUnit!;
+    }
+    if (widget.initialRepeatEvery != null) {
+      _repeatEvery = widget.initialRepeatEvery!;
+    }
+  }
+
   void _selectOption(String opt) {
     setState(() {
       _sel = opt;
       _showYPicker = false;
       _showPDrop = false;
-      _wDays = {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
-      _mDays = {};
-      _yDays = [];
-      _periodDays = 1;
-      _repeatEvery = 1;
-      _periodUnit = 'WEEK';
       _monthPicked = false;
       _dayPicked = false;
     });
@@ -2038,17 +2281,43 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
         _radio('REPEAT'),if(_sel=='REPEAT')_repeatUI(),
       ]))),
       const SizedBox(height:16),
-      Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
-        GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
-        Row(children:[Container(width:8,height:8,decoration:const BoxDecoration(color:Colors.white,shape:BoxShape.circle)),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.white,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1))),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.transparent,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1)))]),
-        GestureDetector(onTap:()async{
-          if(_sel=='SPECIFIC DAYS OF THE WEEK'&&!_wDays.values.any((v)=>v)){_alert('Select at least one day');return;}
-          if(_sel=='SPECIFIC DAYS OF THE MONTH'&&_mDays.isEmpty){_alert('Select at least one day');return;}
-          if(_sel=='SPECIFIC DAYS OF THE YEAR'&&_yDays.isEmpty){_alert('Select at least one day');return;}
-          final res=await Navigator.push<HabitScheduleResult>(context,MaterialPageRoute(builder:(_)=>_ScheduleScreen(category:widget.category,title:widget.title,description:widget.description,frequency:_sel,initialStartDate:widget.startDate)));
-          if(res!=null&&context.mounted)Navigator.pop(context,res);
-        },child:const Text('NEXT',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
-      ]),
+      if(widget.editMode)...[
+        const SizedBox(height:8),
+        Container(height:0.5,color:Colors.white12),
+        IntrinsicHeight(child:Row(children:[
+          Expanded(child:GestureDetector(
+            behavior:HitTestBehavior.opaque,
+            onTap:()=>Navigator.pop(context,null),
+            child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:20),child:const Center(child:Text('CLOSE',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+          )),
+          Container(width:0.5,color:Colors.white12),
+          Expanded(child:GestureDetector(
+            behavior:HitTestBehavior.opaque,
+            onTap:(){
+              if(_sel=='SPECIFIC DAYS OF THE WEEK'&&!_wDays.values.any((v)=>v)){_alert('Select at least one day');return;}
+              if(_sel=='SPECIFIC DAYS OF THE MONTH'&&_mDays.isEmpty){_alert('Select at least one day');return;}
+              if(_sel=='SPECIFIC DAYS OF THE YEAR'&&_yDays.isEmpty){_alert('Select at least one day');return;}
+              Navigator.pop(context,_FrequencyEditResult(frequency:_sel,weekDays:Map.from(_wDays),monthDays:Set.from(_mDays),yearDays:List.from(_yDays),periodDays:_periodDays,periodUnit:_periodUnit,repeatEvery:_repeatEvery));
+            },
+            child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:20),child:const Center(child:Text('CONFIRM',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+          )),
+        ])),
+      ] else ...[
+        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+          GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
+          Row(children:[Container(width:8,height:8,decoration:const BoxDecoration(color:Colors.white,shape:BoxShape.circle)),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.white,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1))),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.transparent,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1)))]),
+          GestureDetector(onTap:()async{
+            if(_sel=='SPECIFIC DAYS OF THE WEEK'&&!_wDays.values.any((v)=>v)){_alert('Select at least one day');return;}
+            if(_sel=='SPECIFIC DAYS OF THE MONTH'&&_mDays.isEmpty){_alert('Select at least one day');return;}
+            if(_sel=='SPECIFIC DAYS OF THE YEAR'&&_yDays.isEmpty){_alert('Select at least one day');return;}
+            final res=await Navigator.push<HabitScheduleResult>(context,MaterialPageRoute(builder:(_)=>_ScheduleScreen(category:widget.category,title:widget.title,description:widget.description,frequency:_sel,initialStartDate:widget.startDate)));
+            if(res!=null&&context.mounted){
+              final enriched=HabitScheduleResult(title:res.title,description:res.description,category:res.category,startDate:res.startDate,frequency:res.frequency,endDate:res.endDate,priority:res.priority,reminders:res.reminders,freqWeekDays:Map.from(_wDays),freqMonthDays:Set.from(_mDays),freqYearDays:List.from(_yDays),freqPeriodDays:_periodDays,freqPeriodUnit:_periodUnit,freqRepeatEvery:_repeatEvery);
+              Navigator.pop(context,enriched);
+            }
+          },child:const Text('NEXT',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
+        ]),
+      ],
     ]))));
   }
 }
@@ -2194,7 +2463,7 @@ class _RingPainter extends CustomPainter {
   void paint(Canvas c, Size s) {
     final center=Offset(s.width/2,s.height/2);
     final r=(s.width/2)-1.5;
-    c.drawCircle(center,r,Paint()..color=Colors.white.withOpacity(0.14)..style=PaintingStyle.stroke..strokeWidth=2.5..strokeCap=StrokeCap.round);
+    c.drawCircle(center,r,Paint()..color=Colors.white.withValues(alpha:0.14)..style=PaintingStyle.stroke..strokeWidth=2.5..strokeCap=StrokeCap.round);
     if(progress<=0)return;
     c.drawArc(Rect.fromCircle(center:center,radius:r),-math.pi/2,2*math.pi*progress.clamp(0.0,1.0),false,Paint()..color=Colors.white..style=PaintingStyle.stroke..strokeWidth=2.5..strokeCap=StrokeCap.round);
   }
@@ -2285,7 +2554,7 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
       key:Key('d_${habit.id}'),
       direction:DismissDirection.endToStart,
       onDismissed:(_)=>widget.onDismiss(habit.id),
-      background:Container(alignment:Alignment.centerRight,padding:const EdgeInsets.only(right:20),color:Colors.red.withOpacity(0.2),child:const Text('DELETE',style:TextStyle(color:Colors.red,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))),
+      background:Container(alignment:Alignment.centerRight,padding:const EdgeInsets.only(right:20),color:Colors.red.withValues(alpha:0.2),child:const Text('DELETE',style:TextStyle(color:Colors.red,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))),
       child:GestureDetector(
         onTap:()=>widget.onTap(habit.id),
         onLongPress:()=>widget.onLongPress(habit.id),
@@ -2391,7 +2660,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
     final icon=earliest.type=='alarm'?Icons.alarm:Icons.notifications;
     if(h.reminders.length==1)return Icon(icon,color:Colors.white,size:16);
     return SizedBox(width:26,height:18,child:Stack(clipBehavior:Clip.none,children:[
-      Positioned(left:-6,top:3,child:Icon(icon,color:Colors.white.withOpacity(0.75),size:14)),
+      Positioned(left:-6,top:3,child:Icon(icon,color:Colors.white.withValues(alpha:0.75),size:14)),
       Positioned(left:0,top:0,child:Icon(icon,color:Colors.white,size:18)),
     ]));
   }
@@ -2460,7 +2729,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:now.toIso8601String())));
       if(res!=null&&mounted)_addFromResult(res);
     }else{
-      final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withOpacity(0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
+      final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
       if(res!=null&&mounted)_addFromResult(res);
     }
   }
@@ -2469,7 +2738,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
     if(r is HabitScheduleResult){
       final sd=DateTime.tryParse(r.startDate)??DateTime.now();
       final ed=r.endDate.isNotEmpty?DateTime.tryParse(r.endDate):null;
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency)));
+      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency,freqWeekDays:Map.from(r.freqWeekDays),freqMonthDays:Set.from(r.freqMonthDays),freqYearDays:List.from(r.freqYearDays),freqPeriodDays:r.freqPeriodDays,freqPeriodUnit:r.freqPeriodUnit,freqRepeatEvery:r.freqRepeatEvery)));
     }else if(r is String){
       setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now())));
     }else if(r is Map){
