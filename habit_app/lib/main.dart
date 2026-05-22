@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/scheduler.dart';
 import 'dart:math' as math;
+import 'dart:async';
 
 void main() => runApp(const HabitApp());
 
@@ -25,17 +28,18 @@ class ReminderEntry {
   ReminderEntry({this.time = '12:00', this.type = 'notification', this.schedule = 'always', Set<String>? weekDays, this.daysBefore = 1}) : weekDays = weekDays ?? {};
 }
 
-enum HabitState { empty, done, failed }
+enum HabitState { empty, done, failed, skipped }
 
 class Habit {
-  final String id, title, category, frequency;
+  final String id, title, category, frequency, description;
   int priority;
   List<ReminderEntry> reminders;
   final DateTime startDate;
-  final DateTime? endDate;
+  DateTime? endDate;
   final Map<String, HabitState> dailyState = {};
+  final Map<String, String> dailyNote = {};
 
-  Habit({required this.id, required this.title, this.category = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY'}) : reminders = reminders ?? [];
+  Habit({required this.id, required this.title, this.category = '', this.description = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY'}) : reminders = reminders ?? [];
 
   static String _key(DateTime d) => '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
 
@@ -48,6 +52,8 @@ class Habit {
 
   HabitState stateOn(DateTime day) => dailyState[_key(day)] ?? HabitState.empty;
   void setStateOn(DateTime day, HabitState s) => dailyState[_key(day)] = s;
+  String noteOn(DateTime day) => dailyNote[_key(day)] ?? '';
+  void setNoteOn(DateTime day, String n) => dailyNote[_key(day)] = n;
 }
 
 class HabitScheduleResult {
@@ -57,7 +63,99 @@ class HabitScheduleResult {
   HabitScheduleResult({required this.title, required this.description, required this.category, required this.startDate, required this.frequency, required this.endDate, required this.priority, required this.reminders});
 }
 
-// FIX 4: Priority modal — entire plus/minus container is tappable
+// ─── Clock Hands Painter ──────────────────────────────────────────────────────
+
+class _ClockHandsPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    canvas.drawCircle(center, radius, Paint()..color = Colors.white);
+    final handPaint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = radius * 0.38
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final minuteAngle = -math.pi / 2;
+    final minuteLen = radius * 0.55;
+    canvas.drawLine(
+      center,
+      Offset(center.dx + minuteLen * math.cos(minuteAngle), center.dy + minuteLen * math.sin(minuteAngle)),
+      handPaint,
+    );
+    final hourAngle = math.pi / 6;
+    final hourLen = radius * 0.38;
+    canvas.drawLine(
+      center,
+      Offset(center.dx + hourLen * math.cos(hourAngle), center.dy + hourLen * math.sin(hourAngle)),
+      handPaint,
+    );
+  }
+  @override
+  bool shouldRepaint(_ClockHandsPainter o) => false;
+}
+
+// ─── Bold Status Icon Painters ────────────────────────────────────────────────
+
+class _BoldCheckPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 4.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+    final path = Path()
+      ..moveTo(size.width * 0.26, size.height * 0.54)
+      ..lineTo(size.width * 0.42, size.height * 0.68)
+      ..lineTo(size.width * 0.76, size.height * 0.32);
+    canvas.drawPath(path, paint);
+  }
+  @override bool shouldRepaint(_BoldCheckPainter o) => false;
+}
+
+class _BoldCrossPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 4.4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      Offset(size.width * 0.35, size.height * 0.35),
+      Offset(size.width * 0.65, size.height * 0.65),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.65, size.height * 0.35),
+      Offset(size.width * 0.35, size.height * 0.65),
+      paint,
+    );
+  }
+  @override bool shouldRepaint(_BoldCrossPainter o) => false;
+}
+
+class _BoldMinusPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black
+      ..strokeWidth = 4.4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      Offset(size.width * 0.28, size.height * 0.50),
+      Offset(size.width * 0.70, size.height * 0.50),
+      paint,
+    );
+  }
+  @override bool shouldRepaint(_BoldMinusPainter o) => false;
+}
+
+// ─── Priority Modal ───────────────────────────────────────────────────────────
+
 class _PriorityModal extends StatefulWidget {
   final int priority;
   final void Function(int) onChanged;
@@ -83,7 +181,6 @@ class _PriorityModalState extends State<_PriorityModal> {
             child: Container(
               decoration: BoxDecoration(color: const Color(0xFF2C2C2C), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white24, width: 1.5)),
               child: IntrinsicHeight(child: Row(children: [
-                // FIX 4: entire left section is tappable (minus)
                 Expanded(child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() { if (_val > 1) _val--; }),
@@ -91,7 +188,6 @@ class _PriorityModalState extends State<_PriorityModal> {
                 Container(width: 1.5, color: Colors.white24),
                 Expanded(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Center(child: Text('$_val', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 36, fontWeight: FontWeight.w800))))),
                 Container(width: 1.5, color: Colors.white24),
-                // FIX 4: entire right section is tappable (plus)
                 Expanded(child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _val++),
@@ -111,6 +207,8 @@ class _PriorityModalState extends State<_PriorityModal> {
     );
   }
 }
+
+// ─── Time Picker Dialog ───────────────────────────────────────────────────────
 
 class _TimePickerDialog extends StatefulWidget {
   final int initialHour, initialMinute;
@@ -197,16 +295,17 @@ class _TimePickerDialogState extends State<_TimePickerDialog> {
         const SizedBox(height: 16),
         Container(height: 1, color: Colors.white38),
         IntrinsicHeight(child: Row(children: [
-          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: ()=>Navigator.pop(context), child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: ()=>Navigator.pop(context), child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
           Container(width: 1, color: Colors.white38),
-          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: (){_finalH();_finalM();widget.onConfirm(_hour,_minute);Navigator.pop(context);}, child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+          Expanded(child: GestureDetector(behavior:HitTestBehavior.opaque,onTap: (){_finalH();_finalM();widget.onConfirm(_hour,_minute);Navigator.pop(context);}, child: Container(width:double.infinity,padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
         ])),
       ]),
     );
   }
 }
 
-// FIX 3: "New Reminder" row has full-width tap area
+// ─── Reminders Modal ──────────────────────────────────────────────────────────
+
 class _RemindersModal extends StatefulWidget {
   final List<ReminderEntry> reminders;
   final void Function(List<ReminderEntry>) onChanged;
@@ -235,11 +334,12 @@ class _RemindersModalState extends State<_RemindersModal> {
         Flexible(child: SingleChildScrollView(child: Padding(padding: const EdgeInsets.fromLTRB(20,0,20,0), child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (_list.isEmpty) ...[const SizedBox(height:20), const Icon(Icons.notifications_off, color: Colors.white, size: 48), const SizedBox(height:8), const Text('NO REMINDERS FOR THIS ACTIVITY', textAlign: TextAlign.center, style: TextStyle(color: Colors.white54, fontSize: 12, letterSpacing: 0.5)), const SizedBox(height:20)]
           else ...[
-            ..._list.asMap().entries.map((e) {
+            ...(() { final sorted = [..._list]..sort((a, b) { final ap = a.time.split(':'); final bp = b.time.split(':'); return ((int.tryParse(ap[0])??0)*60+(int.tryParse(ap.length>1?ap[1]:'0')??0)).compareTo((int.tryParse(bp[0])??0)*60+(int.tryParse(bp.length>1?bp[1]:'0')??0)); }); return sorted.asMap().entries; })().map((e) {
               final i=e.key; final r=e.value;
               final icon = r.type=='none'?Icons.notifications_off:r.type=='alarm'?Icons.alarm:Icons.notifications;
               final sched = r.schedule=='always'?'ALWAYS ENABLED':r.schedule=='before'?'${r.daysBefore} DAYS BEFORE':r.weekDays.join(' . ');
               return Column(children: [
+                if (i > 0) Container(height: 0.5, color: Colors.white12),
                 SizedBox(height: 60, child: Stack(alignment: Alignment.center, children: [
                   Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: ()=>_edit(i), child: Row(children: [
                     Container(width:36,height:36,decoration:const BoxDecoration(color:Color(0xFF444444),shape:BoxShape.circle),child:Icon(icon,color:Colors.white70,size:18)),
@@ -249,32 +349,33 @@ class _RemindersModalState extends State<_RemindersModal> {
                   ]))),
                   Positioned(right:0,top:0,bottom:0,child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: (){setState((){_list.removeAt(i);widget.onChanged(List.from(_list));});}, child: Center(child: Container(width:36,height:36,decoration:const BoxDecoration(color:Color(0xFF444444),shape:BoxShape.circle),child:const Icon(Icons.delete_outline,color:Colors.white70,size:18))))),
                 ])),
-                Container(height: 0.5, color: Colors.white12),
               ]);
             }),
             const SizedBox(height:4),
           ],
-          // FIX 3: entire row is tappable via GestureDetector with HitTestBehavior.opaque
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _add,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
-                Icon(Icons.add_circle_outline, color: Colors.white, size: 18),
-                SizedBox(width: 6),
-                Text('NEW REMINDER', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
-              ]),
-            ),
-          ),
         ])))),
+        Container(height: 0.5, color: Colors.white24),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _add,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [
+              Icon(Icons.add_circle_outline, color: Colors.white, size: 18),
+              SizedBox(width: 6),
+              Text('NEW REMINDER', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+            ]),
+          ),
+        ),
         Container(height: 0.5, color: Colors.white24),
         GestureDetector(behavior:HitTestBehavior.opaque,onTap: (){widget.onChanged(_list);Navigator.pop(context);}, child: Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical: 16),child:Center(child: Text('CLOSE', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5))))),
       ])),
     );
   }
 }
+
+// ─── New Reminder Modal ───────────────────────────────────────────────────────
 
 class _NewReminderModal extends StatefulWidget {
   final void Function(ReminderEntry) onConfirm;
@@ -293,7 +394,12 @@ class _NewReminderModalState extends State<_NewReminderModal> {
   void initState() {
     super.initState();
     final init=widget.initialEntry;
-    _tCtrl=TextEditingController(text:init?.time??'12:00');
+    final rawTime=init?.time??'12:00';
+    final tp=rawTime.split(':');
+    final th=(int.tryParse(tp.isNotEmpty?tp[0]:'12')??12).clamp(0,23);
+    final tm=(int.tryParse(tp.length>1?tp[1]:'00')??0).clamp(0,59);
+    final cleanTime='${th.toString().padLeft(2,'0')}:${tm.toString().padLeft(2,'0')}';
+    _tCtrl=TextEditingController(text:cleanTime);
     _type=init?.type??'notification';
     _schedule=init?.schedule??'always';
     _weekDays=Set.from(init?.weekDays??{});
@@ -327,7 +433,7 @@ class _NewReminderModalState extends State<_NewReminderModal> {
         Padding(padding:const EdgeInsets.symmetric(horizontal:20),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.stretch,children:[
           GestureDetector(onTap:()async{
             final p=_tCtrl.text.split(':');
-            await showDialog(context:context,builder:(_)=>_TimePickerDialog(initialHour:int.tryParse(p.isNotEmpty?p[0]:'12')??12,initialMinute:int.tryParse(p.length>1?p[1]:'00')??0,onConfirm:(h,m){setState(()=>_tCtrl.text='${h.toString().padLeft(2,'0')}:${m.toString().padLeft(2,'0')}');}));
+            await showDialog(context:context,builder:(_)=>_TimePickerDialog(initialHour:int.tryParse(p.isNotEmpty?p[0]:'12')??12,initialMinute:int.tryParse(p.length>1?p[1]:'00')??0,onConfirm:(h,m){final hh=h.clamp(0,23);final mm=m.clamp(0,59);setState(()=>_tCtrl.text='${hh.toString().padLeft(2,'0')}:${mm.toString().padLeft(2,'0')}');}));
           },child:Center(child:Text(_tCtrl.text,style:const TextStyle(color:Colors.white,fontSize:32,fontWeight:FontWeight.w700)))),
           const Center(child:Text('REMINDER TIME',style:TextStyle(color:Colors.white54,fontSize:11,letterSpacing:1))),
           const SizedBox(height:12),
@@ -350,22 +456,1302 @@ class _NewReminderModalState extends State<_NewReminderModal> {
         ])),
         Container(height:0.5,color:Colors.white24),
         IntrinsicHeight(child:Row(children:[
-          Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>Navigator.pop(context),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CANCEL',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+          Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>Navigator.pop(context),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:const Center(child:Text('CANCEL',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
           Container(width:0.5,color:Colors.white24),
           Expanded(child:GestureDetector(behavior:HitTestBehavior.opaque,onTap:(){
             final t=_tCtrl.text.trim();
             if(widget.existingTimes.contains(t)){showDialog(context:context,builder:(_)=>AlertDialog(backgroundColor:const Color(0xFF2C2C2C),title:const Text('Duplicate Reminder',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),content:const Text('A reminder already exists at that time',style:TextStyle(color:Colors.white70,fontSize:13)),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('OK',style:TextStyle(color:Colors.white)))]));return;}
             widget.onConfirm(ReminderEntry(time:t,type:_type,schedule:_schedule,weekDays:Set.from(_weekDays),daysBefore:int.tryParse(_dbCtrl.text)??1));
             Navigator.pop(context);
-          },child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('CONFIRM',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
+          },child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:14),child:const Center(child:Text('CONFIRM',textAlign:TextAlign.center,style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
         ])),
       ])),
     );
   }
 }
 
-// FIX 1: Reset all frequency option data on switch
-// FIX 2: Specific days of the year: initial plus button, max 4 visible rows, scroll
+// ─── Marquee Widget ───────────────────────────────────────────────────────────
+
+class _MarqueeText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  const _MarqueeText({required this.text, required this.style});
+  @override State<_MarqueeText> createState() => _MarqueeTextState();
+}
+
+class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
+  late ScrollController _scrollCtrl;
+  dynamic _ticker;
+  double _textWidth = 0;
+  double _containerWidth = 0;
+  bool _needsScroll = false;
+  static const double _speed = 0.7;
+  double _accumulated = 0;
+  Duration _lastElapsed = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollCtrl = ScrollController();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  void _measure() {
+    if (!mounted) return;
+    final tp = TextPainter(
+      text: TextSpan(text: widget.text, style: widget.style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout(maxWidth: double.infinity);
+    _textWidth = tp.width;
+
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null) _containerWidth = box.size.width;
+
+    if (_textWidth > _containerWidth) {
+      setState(() => _needsScroll = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startMarquee());
+    }
+  }
+
+  void _startMarquee() {
+    _ticker?.dispose();
+    if (_scrollCtrl.hasClients) {
+      _scrollCtrl.jumpTo(0);
+    }
+    _lastElapsed = Duration.zero;
+    _accumulated = 0;
+    _ticker = createTicker((elapsed) {
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      final delta = elapsed - _lastElapsed;
+      _lastElapsed = elapsed;
+      _accumulated += _speed * delta.inMilliseconds / 16.0;
+      final pixels = _accumulated.floor();
+      if (pixels <= 0) return;
+      _accumulated -= pixels;
+      final max = _scrollCtrl.position.maxScrollExtent;
+      final cur = _scrollCtrl.offset;
+      if (cur + pixels >= max) {
+        _scrollCtrl.jumpTo(0);
+      } else {
+        _scrollCtrl.jumpTo(cur + pixels);
+      }
+    });
+    _ticker!.start();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_needsScroll) {
+      return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.clip);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _containerWidth = constraints.maxWidth;
+        final gap = _containerWidth * 0.5;
+        return SingleChildScrollView(
+          controller: _scrollCtrl,
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: Row(
+            children: [
+              Text(widget.text, style: widget.style, maxLines: 1),
+              SizedBox(width: gap),
+              Text(widget.text, style: widget.style, maxLines: 1),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Add Note Dialog ──────────────────────────────────────────────────────────
+
+class _AddNoteDialog extends StatefulWidget {
+  final String initialNote;
+  final void Function(String) onConfirm;
+  const _AddNoteDialog({required this.initialNote, required this.onConfirm});
+  @override State<_AddNoteDialog> createState() => _AddNoteDialogState();
+}
+class _AddNoteDialogState extends State<_AddNoteDialog> {
+  late TextEditingController _ctrl;
+  @override void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialNote); }
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+          child: Text('ADD NOTE...', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white24, width: 1),
+            ),
+            child: TextField(
+              controller: _ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (v) {
+                final u = v.toUpperCase();
+                if (v != u) {
+                  _ctrl.value = TextEditingValue(text: u, selection: TextSelection.collapsed(offset: u.length));
+                }
+              },
+              maxLines: 5,
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.all(12),
+              ),
+            ),
+          ),
+        ),
+        Container(height: 0.5, color: Colors.white24),
+        IntrinsicHeight(child: Row(children: [
+          Expanded(child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.pop(context),
+            child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('CANCEL', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+          )),
+          Container(width: 0.5, color: Colors.white24),
+          Expanded(child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () { widget.onConfirm(_ctrl.text.trim()); Navigator.pop(context); },
+            child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('OK', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+          )),
+        ])),
+      ]),
+    );
+  }
+}
+
+// ─── Habit Name Edit Dialog ───────────────────────────────────────────────────
+
+class _HabitNameEditDialog extends StatefulWidget {
+  final String initialName;
+  final void Function(String) onConfirm;
+  const _HabitNameEditDialog({required this.initialName, required this.onConfirm});
+  @override State<_HabitNameEditDialog> createState() => _HabitNameEditDialogState();
+}
+class _HabitNameEditDialogState extends State<_HabitNameEditDialog> {
+  late TextEditingController _ctrl;
+  @override void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialName); }
+  @override void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Center(child: Text('HABIT NAME', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white24, width: 1),
+              ),
+              child: TextField(
+                controller: _ctrl,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (v) {
+                  final u = v.toUpperCase();
+                  if (v != u) {
+                    _ctrl.value = TextEditingValue(text: u, selection: TextSelection.collapsed(offset: u.length));
+                  }
+                },
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          IntrinsicHeight(child: Row(children: [
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+            )),
+            Container(width: 0.5, color: Colors.white24),
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final name = _ctrl.text.trim();
+                if (name.isNotEmpty) widget.onConfirm(name);
+                Navigator.pop(context);
+              },
+              child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+            )),
+          ])),
+        ]),
+      ),
+    );
+  }
+}
+
+
+class _CategorySelectDialog extends StatefulWidget {
+  final void Function(String) onSelected;
+  const _CategorySelectDialog({required this.onSelected});
+  @override State<_CategorySelectDialog> createState() => _CategorySelectDialogState();
+}
+class _CategorySelectDialogState extends State<_CategorySelectDialog> {
+  final _scrollCtrl = ScrollController();
+  static const _categories = [
+    'MEDITATION','SPORT','ENTERTAINMENT','ART','STUDY',
+    'QUIT A BAD HABIT',
+  ];
+  static const _manageCategory = 'MANAGE CATEGORIES';
+  static const double _rowHeight = 52.0;
+  static const int _maxVisible = 5;
+
+  @override void dispose() { _scrollCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool needsScroll = _categories.length > _maxVisible;
+    final double listHeight = needsScroll
+        ? _rowHeight * _maxVisible
+        : _rowHeight * _categories.length;
+
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Sticky title
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(child: Text('SELECT A CATEGORY', textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            // Scrollable category list
+            SizedBox(
+              height: listHeight,
+              child: needsScroll
+                  ? ScrollbarTheme(
+                      data: ScrollbarThemeData(
+                        thumbColor: WidgetStateProperty.all(Colors.white54),
+                        trackColor: WidgetStateProperty.all(Colors.white12),
+                        trackBorderColor: WidgetStateProperty.all(Colors.transparent),
+                        thickness: WidgetStateProperty.all(4),
+                        radius: const Radius.circular(2),
+                        thumbVisibility: WidgetStateProperty.all(true),
+                        trackVisibility: WidgetStateProperty.all(true),
+                      ),
+                      child: Scrollbar(
+                        controller: _scrollCtrl,
+                        thumbVisibility: true,
+                        trackVisibility: true,
+                        child: ListView.builder(
+                          controller: _scrollCtrl,
+                          padding: EdgeInsets.zero,
+                          itemCount: _categories.length,
+                          itemExtent: _rowHeight,
+                          itemBuilder: (ctx, i) {
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () { widget.onSelected(_categories[i]); Navigator.pop(ctx); },
+                              child: SizedBox(height: _rowHeight, child: Center(
+                                child: Text(_categories[i], textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white, fontSize: 15,
+                                    fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                              )),
+                            );
+                          },
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      physics: const NeverScrollableScrollPhysics(),
+                      padding: EdgeInsets.zero,
+                      itemCount: _categories.length,
+                      itemExtent: _rowHeight,
+                      itemBuilder: (ctx, i) {
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () { widget.onSelected(_categories[i]); Navigator.pop(ctx); },
+                          child: SizedBox(height: _rowHeight, child: Center(
+                            child: Text(_categories[i], textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white, fontSize: 15,
+                                fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                          )),
+                        );
+                      },
+                    ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            // Sticky: Manage Categories
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () { widget.onSelected(_manageCategory); Navigator.pop(context); },
+              child: SizedBox(
+                height: _rowHeight,
+                child: Center(
+                  child: Text(_manageCategory, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 15,
+                      fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                ),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            // Sticky: Close
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Center(child: Text('CLOSE', textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+// ─── Edit Habit Screen ────────────────────────────────────────────────────────
+
+class EditHabitScreen extends StatefulWidget {
+  final Habit habit;
+  final VoidCallback onDelete;
+  const EditHabitScreen({super.key, required this.habit, required this.onDelete});
+  @override State<EditHabitScreen> createState() => _EditHabitScreenState();
+}
+
+class _EditHabitScreenState extends State<EditHabitScreen> {
+  // Toggle state: false = CALENDAR view, true = EDIT view
+  // On this screen EDIT is always selected by default
+  bool _editSelected = true;
+  String _habitTitle = '';
+  String _category = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _habitTitle = widget.habit.title;
+    _category = widget.habit.category;
+  }
+
+  static const _monthNames = [
+    'JAN','FEB','MAR','APR','MAY','JUN',
+    'JUL','AUG','SEP','OCT','NOV','DEC'
+  ];
+  static const _monthNamesFull = [
+    'JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
+    'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'
+  ];
+
+  String _fmtDate(DateTime d) =>
+      '${_monthNames[d.month - 1]} ${d.day}, ${d.year}';
+
+  String _fmtDateShort(DateTime d) =>
+      '${d.month}/${d.day}/${d.year % 100}';
+
+  String _formatFrequency(String freq) {
+    if (freq == 'EVERY DAY' || freq.isEmpty) return 'EVERY DAY';
+    if (freq == 'REPEAT') return 'REPEAT';
+    if (freq == 'SOME DAYS PER PERIOD') return 'SOME DAYS PER PERIOD';
+    if (freq == 'SPECIFIC DAYS OF THE WEEK') return 'SPECIFIC DAYS OF THE WEEK';
+    if (freq == 'SPECIFIC DAYS OF THE MONTH') return 'SPECIFIC DAYS OF THE MONTH';
+    if (freq == 'SPECIFIC DAYS OF THE YEAR') return 'SPECIFIC DAYS OF THE YEAR';
+    return freq.toUpperCase();
+  }
+
+  Widget _buildDivider() => Container(height: 0.5, color: Colors.white12);
+
+  Widget _buildRow({
+    required String label,
+    required Widget right,
+    VoidCallback? onTap,
+  }) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: right,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap != null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: content,
+      );
+    }
+    return content;
+  }
+
+  Widget _buildValueText(String value) => Text(
+        value.toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.right,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.3,
+        ),
+      );
+
+  Widget _buildPill(String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2C2C2C),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
+        ),
+      );
+
+  String _priorityLabel() {
+    final p = widget.habit.priority;
+    if (p == 1) return 'DEFAULT';
+    return '$p 🏳';
+  }
+
+  void _confirmDeleteEndDate() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Text(
+                  'DO YOU WANT TO DELETE THE END DATE?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text(
+                              'CANCEL',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 0.5, color: Colors.white24),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() => widget.habit.endDate = null);
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text(
+                              'CONFIRM',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _editHabitName() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _HabitNameEditDialog(
+        initialName: _habitTitle,
+        onConfirm: (newName) {
+          setState(() {
+            _habitTitle = newName;
+          });
+        },
+      ),
+    );
+  }
+
+  void _confirmDeleteHabit() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Text(
+                  'DO YOU WANT TO DELETE THIS HABIT?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text(
+                              'CANCEL',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 0.5, color: Colors.white24),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.pop(context); // close dialog
+                          widget.onDelete();
+                          Navigator.pop(context); // close edit screen
+                          Navigator.pop(context); // close bottom sheet
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text(
+                              'CONFIRM',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
+  void _selectCategory() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _CategorySelectDialog(
+        onSelected: (cat) => setState(() => _category = cat),
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final habit = widget.habit;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── 1. TOP HEADER ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      habit.title.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── 2. CALENDAR / EDIT TOGGLE ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1C),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      // CALENDAR option
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: !_editSelected ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'CALENDAR',
+                                style: TextStyle(
+                                  color: !_editSelected ? Colors.black : Colors.white54,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // EDIT option
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _editSelected = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _editSelected ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'EDIT',
+                                style: TextStyle(
+                                  color: _editSelected ? Colors.black : Colors.white54,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // ── ROWS ──
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildDivider(),
+
+                    // 3. HABIT NAME
+                    _buildRow(
+                      label: 'HABIT NAME',
+                      right: _buildValueText(_habitTitle),
+                      onTap: _editHabitName,
+                    ),
+                    _buildDivider(),
+
+                    // 4. CATEGORY
+                    _buildRow(
+                      label: 'CATEGORY',
+                      right: _buildValueText(_category.isEmpty ? (habit.category.isEmpty ? '—' : habit.category) : _category),
+                      onTap: _selectCategory,
+                    ),
+                    _buildDivider(),
+
+                    // 5. DESCRIPTION
+                    _buildRow(
+                      label: 'DESCRIPTION',
+                      right: _buildValueText(habit.description.isEmpty ? '—' : habit.description),
+                    ),
+                    _buildDivider(),
+
+                    // 6. TIME AND REMINDERS
+                    _buildRow(
+                      label: 'TIME AND REMINDERS',
+                      right: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF2C2C2C),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${habit.reminders.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildDivider(),
+
+                    // 7. PRIORITY
+                    _buildRow(
+                      label: 'PRIORITY',
+                      right: habit.priority == 1
+                          ? _buildValueText('DEFAULT')
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2C2C2C),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        '${habit.priority}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.flag, color: Colors.white, size: 14),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                    ),
+                    _buildDivider(),
+
+                    // 8. FREQUENCY
+                    _buildRow(
+                      label: 'FREQUENCY',
+                      right: _buildValueText(_formatFrequency(habit.frequency)),
+                    ),
+                    _buildDivider(),
+
+                    // 9. START DATE
+                    _buildRow(
+                      label: 'START DATE',
+                      right: _buildPill(_fmtDateShort(habit.startDate)),
+                    ),
+                    _buildDivider(),
+
+                    // 10. END DATE
+                    // 10. END DATE
+                    _buildRow(
+                      label: 'END DATE',
+                      right: habit.endDate != null
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: _confirmDeleteEndDate,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(right: 10),
+                                    child: Icon(Icons.delete_outline, color: Colors.white, size: 20),
+                                  ),
+                                ),
+                                _buildPill(_fmtDateShort(habit.endDate!)),
+                              ],
+                            )
+                          : const Text(
+                              '—',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                    _buildDivider(),
+
+                    // 11. ARCHIVE
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {},
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'ARCHIVE HABIT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildDivider(),
+
+                    // 12. RESTART HABIT PROGRESS
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {},
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'RESTART HABIT PROGRESS',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildDivider(),
+
+                    // 13. DELETE HABIT
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _confirmDeleteHabit,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: Text(
+                            'DELETE HABIT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    _buildDivider(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Habit Bottom Sheet ───────────────────────────────────────────────────────
+
+class _HabitBottomSheet extends StatefulWidget {
+  final Habit habit;
+  final DateTime selectedDay;
+  final void Function(HabitState) onStateChanged;
+  final void Function(String) onNoteChanged;
+  final VoidCallback onDelete;
+  const _HabitBottomSheet({
+    required this.habit,
+    required this.selectedDay,
+    required this.onStateChanged,
+    required this.onNoteChanged,
+    required this.onDelete,
+  });
+  @override State<_HabitBottomSheet> createState() => _HabitBottomSheetState();
+}
+
+class _HabitBottomSheetState extends State<_HabitBottomSheet> {
+  late HabitState _state;
+  late String _note;
+
+  @override
+  void initState() {
+    super.initState();
+    _state = widget.habit.stateOn(widget.selectedDay);
+    _note = widget.habit.noteOn(widget.selectedDay);
+  }
+
+  String _fmtDate(DateTime d) => '${d.month}/${d.day}/${d.year % 100}';
+
+  void _setState(HabitState s) {
+    setState(() => _state = s);
+    widget.onStateChanged(s);
+  }
+
+  Widget _statusBtn(HabitState s, Widget icon, String label) {
+    final selected = _state == s;
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _setState(s),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Opacity(opacity: selected ? 1.0 : 0.35, child: icon),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(
+              color: selected ? Colors.white : Colors.white54,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _pendingIcon() {
+    if (widget.habit.reminders.isNotEmpty) {
+      return SizedBox(
+        width: 26, height: 26,
+        child: CustomPaint(painter: _ClockHandsPainter()),
+      );
+    }
+    return Container(
+      width: 26, height: 26,
+      decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+    );
+  }
+
+  Widget _doneIcon() => Container(
+    width: 26, height: 26,
+    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+    child: CustomPaint(painter: _BoldCheckPainter()),
+  );
+
+  Widget _failIcon() => Container(
+    width: 26, height: 26,
+    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+    child: CustomPaint(painter: _BoldCrossPainter()),
+  );
+
+  void _openNote() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _AddNoteDialog(
+        initialNote: _note,
+        onConfirm: (n) {
+          setState(() => _note = n);
+          widget.onNoteChanged(n);
+        },
+      ),
+    );
+  }
+
+  void _skip() {
+    _setState(HabitState.skipped);
+    Navigator.pop(context);
+  }
+
+  void _openEdit() {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => EditHabitScreen(
+          habit: widget.habit,
+          onDelete: widget.onDelete,
+        ),
+      ),
+    );
+  }
+
+  String get _reminderText {
+    if (widget.habit.reminders.isEmpty) return '';
+    final times = widget.habit.reminders
+        .where((r) => r.type != 'none')
+        .map((r) => r.time)
+        .toList();
+    times.sort((a, b) {
+      final ap = a.split(':'); final bp = b.split(':');
+      final am = (int.tryParse(ap[0])??0)*60+(int.tryParse(ap.length>1?ap[1]:'0')??0);
+      final bm = (int.tryParse(bp[0])??0)*60+(int.tryParse(bp.length>1?bp[1]:'0')??0);
+      return am.compareTo(bm);
+    });
+    return times.join(' • ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final habit = widget.habit;
+    final dateStr = _fmtDate(widget.selectedDay);
+    final reminderStr = _reminderText;
+    final hasNote = _note.isNotEmpty;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(habit.title.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 0.3)),
+              const SizedBox(height: 2),
+              Text(dateStr, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+              if (habit.description.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  habit.description.toUpperCase(),
+                  style: const TextStyle(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2C2C),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IntrinsicHeight(child: Row(children: [
+              _statusBtn(HabitState.empty, _pendingIcon(), 'PENDING'),
+              Container(width: 0.5, color: Colors.white12),
+              _statusBtn(HabitState.done, _doneIcon(), 'DONE'),
+              Container(width: 0.5, color: Colors.white12),
+              _statusBtn(HabitState.failed, _failIcon(), 'FAIL'),
+            ])),
+          ),
+          const SizedBox(height: 16),
+          if (reminderStr.isNotEmpty)
+            Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'REMINDERS',
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 18,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _MarqueeText(
+                        text: reminderStr,
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, height: 1.0),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openNote,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: hasNote
+                    ? Text(_note.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3))
+                    : const Text('ADD NOTE...', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+              ),
+            ),
+          ),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _skip,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+              child: const Text('SKIP', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+            ),
+          ),
+          Container(height: 0.5, color: Colors.white12),
+          IntrinsicHeight(child: Row(children: [
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () { Navigator.pop(context); },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: const Center(child: Text('CALENDAR', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+              ),
+            )),
+            Container(width: 0.5, color: Colors.white12),
+            Expanded(child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openEdit,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: const Center(child: Text('EDIT', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+              ),
+            )),
+          ])),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Frequency Screen ─────────────────────────────────────────────────────────
+
 class HabitFrequencyScreen extends StatefulWidget {
   final String category,startDate,title,description;
   const HabitFrequencyScreen({super.key,required this.category,required this.startDate,required this.title,required this.description});
@@ -373,33 +1759,27 @@ class HabitFrequencyScreen extends StatefulWidget {
 }
 class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   String _sel='EVERY DAY';
-  // FIX 1: These are reset each time the user switches to another option
   Map<String,bool> _wDays={'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
   Set<int> _mDays={};
   List<DateTime> _yDays=[];
-  // FIX 2: show the year picker inline (no initial rows, only a plus button)
   bool _showYPicker=false;
-  // DATE PICKER VALIDATION: track whether user has explicitly selected month and day
   bool _monthPicked=false, _dayPicked=false;
   int _pMonth=DateTime.now().month,_pDay=DateTime.now().day,_periodDays=1,_repeatEvery=1;
   String _periodUnit='WEEK';
   bool _showPDrop=false;
   static const _mNames=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
 
-  // FIX 1: Reset all sub-state when switching frequency option
   void _selectOption(String opt) {
     setState(() {
       _sel = opt;
       _showYPicker = false;
       _showPDrop = false;
-      // Reset all sub-states
       _wDays = {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false};
       _mDays = {};
       _yDays = [];
       _periodDays = 1;
       _repeatEvery = 1;
       _periodUnit = 'WEEK';
-      // Reset date picker validation flags
       _monthPicked = false;
       _dayPicked = false;
     });
@@ -441,9 +1821,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
     return Column(crossAxisAlignment:CrossAxisAlignment.start,children:rows);
   }
 
-  // FIX 2: Year days UI — initial state shows only a plus button,
-  // adding creates rows, max 4 visible at once with scroll, plus button floats right
-  // DATE PICKER VALIDATION: month and day must both be explicitly selected
   Widget _yDaysUI(){
     const double rowH = 44.0;
     const int maxVisible = 4;
@@ -452,7 +1829,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
       onTap: () => setState(() {
         _pMonth = DateTime.now().month;
         _pDay = DateTime.now().day;
-        // Reset validation flags when opening the picker fresh
         _monthPicked = false;
         _dayPicked = false;
         _showYPicker = true;
@@ -469,15 +1845,15 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
         Padding(
           padding: const EdgeInsets.only(left: 32, bottom: 8),
           child: Row(children: [
-            Text('SELECT AT LEAST ONE DAY', style: const TextStyle(color: Colors.white38, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+            const Text('SELECT AT LEAST ONE DAY', style: TextStyle(color: Colors.white38, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
             const SizedBox(width: 8),
             plusBtn,
           ]),
         )
       else
-         SizedBox(
+        SizedBox(
           height: _yDays.length > maxVisible ? rowH * maxVisible : rowH * _yDays.length,
-           child: Row(children: [
+          child: Row(children: [
             Expanded(
               child: ScrollbarTheme(
                 data: ScrollbarThemeData(
@@ -531,7 +1907,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
                 const Center(child: Text('SELECT A DATE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 1))),
                 const SizedBox(height: 12),
                 SizedBox(height: 100, child: Row(children: [
-                  // MONTH wheel: sets _monthPicked=true on interaction, highlights only when picked
                   Expanded(flex: 2, child: ListWheelScrollView.useDelegate(
                     itemExtent: 32,
                     physics: const FixedExtentScrollPhysics(),
@@ -552,7 +1927,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
                     ),
                   )),
                   const SizedBox(width: 8),
-                  // DAY wheel: sets _dayPicked=true on interaction, highlights only when picked
                   Expanded(child: ListWheelScrollView.useDelegate(
                     itemExtent: 32,
                     physics: const FixedExtentScrollPhysics(),
@@ -591,7 +1965,6 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
               Expanded(child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () {
-                  // VALIDATION: both month and day must be explicitly selected
                   if (!_monthPicked || !_dayPicked) {
                     showDialog(context: context, builder: (_) => AlertDialog(
                       backgroundColor: const Color(0xFF2C2C2C),
@@ -680,6 +2053,8 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   }
 }
 
+// ─── Schedule Screen ──────────────────────────────────────────────────────────
+
 class _ScheduleScreen extends StatefulWidget {
   final String category,title,description,frequency,initialStartDate;
   const _ScheduleScreen({required this.category,required this.title,required this.description,required this.frequency,required this.initialStartDate});
@@ -725,6 +2100,8 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
   }
 }
 
+// ─── Habit Detail Screen ──────────────────────────────────────────────────────
+
 class HabitDetailScreen extends StatefulWidget {
   final String category,startDate;
   const HabitDetailScreen({super.key,required this.category,required this.startDate});
@@ -738,9 +2115,13 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     return Scaffold(backgroundColor:Colors.black,body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,32,24,24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('DEFINE YOUR HABIT',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:1)),
       const SizedBox(height:40),
+      const Text('HABIT NAME', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+      const SizedBox(height: 6),
       TextField(controller:_n,autofocus:true,textCapitalization:TextCapitalization.characters,onChanged:(v){final u=v.toUpperCase();if(v!=u){_n.value=TextEditingValue(text:u,selection:TextSelection.collapsed(offset:u.length));}},style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'HABIT',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
       const SizedBox(height:28),
-      TextField(controller:_d,textCapitalization:TextCapitalization.characters,onChanged:(v){final u=v.toUpperCase();if(v!=u){_d.value=TextEditingValue(text:u,selection:TextSelection.collapsed(offset:u.length));}},style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'DESCRIPTION (OPTIONAL)',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)))),
+      const Text('HABIT DESCRIPTION (OPTIONAL)', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+      const SizedBox(height: 6),
+      TextField(controller:_d,textCapitalization:TextCapitalization.characters,maxLines:null,maxLength:550,maxLengthEnforcement:MaxLengthEnforcement.enforced,onChanged:(v){final u=v.toUpperCase();if(v!=u){_d.value=TextEditingValue(text:u,selection:TextSelection.collapsed(offset:u.length));}},style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),decoration:const InputDecoration(hintText:'DESCRIPTION (OPTIONAL)',hintStyle:TextStyle(color:Colors.white38,fontSize:16,fontWeight:FontWeight.w600,letterSpacing:0.5),enabledBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white24,width:1)),focusedBorder:UnderlineInputBorder(borderSide:BorderSide(color:Colors.white,width:1)),counterStyle:TextStyle(color:Colors.white38,fontSize:11,fontWeight:FontWeight.w600))),
       const Spacer(),
       Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
         GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
@@ -755,6 +2136,8 @@ class _HabitDetailScreenState extends State<HabitDetailScreen> {
     ]))));
   }
 }
+
+// ─── Category Selection Screen ────────────────────────────────────────────────
 
 class CategorySelectionScreen extends StatelessWidget {
   final String habitTitle,startDate;
@@ -778,6 +2161,8 @@ class CategorySelectionScreen extends StatelessWidget {
   }
 }
 
+// ─── Start Date Modal ─────────────────────────────────────────────────────────
+
 class StartDateModal extends StatelessWidget {
   final DateTime selectedDate;
   const StartDateModal({super.key,required this.selectedDate});
@@ -800,6 +2185,8 @@ class StartDateModal extends StatelessWidget {
   }
 }
 
+// ─── Ring Painter ─────────────────────────────────────────────────────────────
+
 class _RingPainter extends CustomPainter {
   final double progress;
   _RingPainter(this.progress);
@@ -814,15 +2201,27 @@ class _RingPainter extends CustomPainter {
   @override bool shouldRepaint(_RingPainter o)=>o.progress!=progress;
 }
 
+// ─── Habit Animated List ──────────────────────────────────────────────────────
+
 class _HabitAnimatedList extends StatefulWidget {
   final List<Habit> habits;
   final DateTime selectedDay;
   final Widget? Function(Habit) buildReminderIcon;
   final String? Function(Habit) earliestReminderTime;
-  final Widget Function(HabitState) buildStatusIcon;
+  final Widget Function(HabitState, bool hasReminders) buildStatusIcon;
   final void Function(String) onTap;
   final void Function(String) onDismiss;
-  const _HabitAnimatedList({required this.habits,required this.selectedDay,required this.buildReminderIcon,required this.earliestReminderTime,required this.buildStatusIcon,required this.onTap,required this.onDismiss});
+  final void Function(String) onLongPress;
+  const _HabitAnimatedList({
+    required this.habits,
+    required this.selectedDay,
+    required this.buildReminderIcon,
+    required this.earliestReminderTime,
+    required this.buildStatusIcon,
+    required this.onTap,
+    required this.onDismiss,
+    required this.onLongPress,
+  });
   @override State<_HabitAnimatedList> createState() => _HabitAnimatedListState();
 }
 
@@ -881,19 +2280,24 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
     final icon=widget.buildReminderIcon(habit);
     final time=widget.earliestReminderTime(habit);
     final state=habit.stateOn(widget.selectedDay);
+    final hasReminders = habit.reminders.isNotEmpty;
     return Dismissible(
       key:Key('d_${habit.id}'),
       direction:DismissDirection.endToStart,
       onDismissed:(_)=>widget.onDismiss(habit.id),
       background:Container(alignment:Alignment.centerRight,padding:const EdgeInsets.only(right:20),color:Colors.red.withOpacity(0.2),child:const Text('DELETE',style:TextStyle(color:Colors.red,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))),
-      child:GestureDetector(onTap:()=>widget.onTap(habit.id),child:Container(padding:const EdgeInsets.symmetric(vertical:16),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.white10,width:0.5))),child:Row(children:[
-        Text(habit.title.toUpperCase(),style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.3)),
-        if(habit.priority>1)...[const SizedBox(width:6),Text('${habit.priority}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),const SizedBox(width:2),const Icon(Icons.flag,color:Colors.white,size:14)],
-        if(icon!=null)...[const SizedBox(width:6),icon,if(time!=null)...[const SizedBox(width:4),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))]],
-        if(icon==null&&time!=null)...[const SizedBox(width:6),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))],
-        const Spacer(),
-        widget.buildStatusIcon(state),
-      ]))),
+      child:GestureDetector(
+        onTap:()=>widget.onTap(habit.id),
+        onLongPress:()=>widget.onLongPress(habit.id),
+        child:Container(padding:const EdgeInsets.symmetric(vertical:16),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.white10,width:0.5))),child:Row(children:[
+          Text(habit.title.toUpperCase(),style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.3)),
+          if(habit.priority>1)...[const SizedBox(width:6),Text('${habit.priority}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),const SizedBox(width:2),const Icon(Icons.flag,color:Colors.white,size:14)],
+          if(icon!=null)...[const SizedBox(width:6),icon,if(time!=null)...[const SizedBox(width:4),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))]],
+          if(icon==null&&time!=null)...[const SizedBox(width:6),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))],
+          const Spacer(),
+          widget.buildStatusIcon(state, hasReminders),
+        ])),
+      ),
     );
   }
 
@@ -914,6 +2318,8 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
     );
   }
 }
+
+// ─── Habit Home Page ──────────────────────────────────────────────────────────
 
 class HabitHomePage extends StatefulWidget {
   const HabitHomePage({super.key});
@@ -954,8 +2360,8 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   List<Habit> get _sorted{
     final h=_forDay(_sel);
-    final empty=h.where((x)=>x.stateOn(_sel)==HabitState.empty).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
-    final done=h.where((x)=>x.stateOn(_sel)!=HabitState.empty).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
+    final empty=h.where((x)=>x.stateOn(_sel)==HabitState.empty||x.stateOn(_sel)==HabitState.skipped).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
+    final done=h.where((x)=>x.stateOn(_sel)!=HabitState.empty&&x.stateOn(_sel)!=HabitState.skipped).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
     return [...empty,...done];
   }
 
@@ -963,6 +2369,10 @@ class _HabitHomePageState extends State<HabitHomePage> {
     setState((){
       final h=_all.firstWhere((x)=>x.id==id);
       final cur=h.stateOn(_sel);
+      if(cur==HabitState.skipped){
+        h.setStateOn(_sel,HabitState.empty);
+        return;
+      }
       h.setStateOn(_sel,cur==HabitState.empty?HabitState.done:cur==HabitState.done?HabitState.failed:HabitState.empty);
     });
   }
@@ -986,12 +2396,61 @@ class _HabitHomePageState extends State<HabitHomePage> {
     ]));
   }
 
-  Widget _statusIcon(HabitState s){
+  Widget _statusIcon(HabitState s, bool hasReminders){
     switch(s){
-      case HabitState.empty:return Container(width:26,height:26,decoration:BoxDecoration(shape:BoxShape.circle,color:Colors.white,border:Border.all(color:Colors.white,width:1.5)),child:const Icon(Icons.circle,color:Colors.white,size:14));
-      case HabitState.done:return Container(width:26,height:26,decoration:const BoxDecoration(shape:BoxShape.circle,color:Colors.white),child:const Icon(Icons.check,color:Colors.black,size:16));
-      case HabitState.failed:return Container(width:26,height:26,decoration:const BoxDecoration(shape:BoxShape.circle,color:Colors.white),child:const Icon(Icons.close,color:Colors.black,size:16));
+      case HabitState.skipped:
+        return Container(
+          width:26, height:26,
+          decoration:const BoxDecoration(shape:BoxShape.circle, color:Colors.white),
+          child: CustomPaint(painter: _BoldMinusPainter()),
+        );
+      case HabitState.empty:
+        if(hasReminders){
+          return SizedBox(
+            width:26, height:26,
+            child: CustomPaint(painter: _ClockHandsPainter()),
+          );
+        }
+        return Container(
+          width:26, height:26,
+          decoration:const BoxDecoration(shape:BoxShape.circle, color:Colors.white),
+        );
+      case HabitState.done:
+        return Container(
+          width:26, height:26,
+          decoration:const BoxDecoration(shape:BoxShape.circle, color:Colors.white),
+          child: CustomPaint(painter: _BoldCheckPainter()),
+        );
+      case HabitState.failed:
+        return Container(
+          width:26, height:26,
+          decoration:const BoxDecoration(shape:BoxShape.circle, color:Colors.white),
+          child: CustomPaint(painter: _BoldCrossPainter()),
+        );
     }
+  }
+
+  void _longPress(String id) {
+    final habit = _all.firstWhere((x) => x.id == id);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (_) => _HabitBottomSheet(
+        habit: habit,
+        selectedDay: _sel,
+        onStateChanged: (s) {
+          setState(() => habit.setStateOn(_sel, s));
+        },
+        onNoteChanged: (n) {
+          setState(() => habit.setNoteOn(_sel, n));
+        },
+        onDelete: () {
+          setState(() => _all.removeWhere((h) => h.id == id));
+        },
+      ),
+    );
   }
 
   Future<void> _add()async{
@@ -1010,12 +2469,12 @@ class _HabitHomePageState extends State<HabitHomePage> {
     if(r is HabitScheduleResult){
       final sd=DateTime.tryParse(r.startDate)??DateTime.now();
       final ed=r.endDate.isNotEmpty?DateTime.tryParse(r.endDate):null;
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency)));
+      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency)));
     }else if(r is String){
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,startDate:DateTime.now())));
+      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now())));
     }else if(r is Map){
       final sd=r['startDate']!=null?DateTime.tryParse(r['startDate'] as String)??DateTime.now():DateTime.now();
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',startDate:sd)));
+      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd)));
     }
   }
 
@@ -1089,6 +2548,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
               buildStatusIcon:_statusIcon,
               onTap:_cycle,
               onDismiss:(id)=>setState(()=>_all.removeWhere((h)=>h.id==id)),
+              onLongPress:_longPress,
             )),
       ])),
       floatingActionButton:GestureDetector(onTap:_add,child:Container(width:54,height:54,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:const Icon(Icons.add,color:Colors.white,size:26))),
