@@ -35,7 +35,7 @@ class Habit {
   String frequency;
   int priority;
   List<ReminderEntry> reminders;
-  final DateTime startDate;
+  DateTime startDate;
   DateTime? endDate;
   final Map<String, HabitState> dailyState = {};
   final Map<String, String> dailyNote = {};
@@ -1183,6 +1183,52 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
     );
   }
 
+  Future<void> _pickStartDate() async {
+    final p = await showDatePicker(
+      context: context,
+      initialDate: widget.habit.startDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (c, ch) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Colors.white,
+            onPrimary: Colors.black,
+            surface: Color(0xFF2C2C2C),
+            onSurface: Colors.white,
+          ),
+        ),
+        child: ch!,
+      ),
+    );
+    if (p != null && mounted) {
+      setState(() => widget.habit.startDate = p);  // NOTE: see Section 2 below
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final p = await showDatePicker(
+      context: context,
+      initialDate: widget.habit.endDate ?? widget.habit.startDate.add(const Duration(days: 60)),
+      firstDate: widget.habit.startDate,
+      lastDate: DateTime(2100),
+      builder: (c, ch) => Theme(
+        data: ThemeData.dark().copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: Colors.white,
+            onPrimary: Colors.black,
+            surface: Color(0xFF2C2C2C),
+            onSurface: Colors.white,
+          ),
+        ),
+        child: ch!,
+      ),
+    );
+    if (p != null && mounted) {
+      setState(() => widget.habit.endDate = p);
+    }
+  }
+
   void _editHabitName() {
     showDialog(
       context: context,
@@ -1594,36 +1640,53 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                     _buildRow(
                       label: 'START DATE',
                       right: _buildPill(_fmtDateShort(habit.startDate)),
+                      onTap: _pickStartDate,
                     ),
                     _buildDivider(),
 
                     // 10. END DATE
                     // 10. END DATE
+                    // 10. END DATE
+                    // 10. END DATE
                     _buildRow(
                       label: 'END DATE',
-                      right: habit.endDate != null
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: _confirmDeleteEndDate,
-                                  child: const Padding(
-                                    padding: EdgeInsets.only(right: 10),
-                                    child: Icon(Icons.delete_outline, color: Colors.white, size: 20),
-                                  ),
-                                ),
-                                _buildPill(_fmtDateShort(habit.endDate!)),
-                              ],
-                            )
-                          : const Text(
-                              '—',
-                              style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                      right: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (widget.habit.endDate != null)
+                            GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _confirmDeleteEndDate,
+                              child: const Padding(
+                                padding: EdgeInsets.only(right: 10),
+                                child: Icon(Icons.delete_outline, color: Colors.white, size: 20),
                               ),
                             ),
+                          Container(
+                            constraints: const BoxConstraints(minWidth: 80),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2C2C2C),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Center(
+                              child: Text(
+                                widget.habit.endDate != null
+                                    ? _fmtDateShort(widget.habit.endDate!).toUpperCase()
+                                    : '—',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      onTap: _pickEndDate,
                     ),
                     _buildDivider(),
 
@@ -2019,14 +2082,22 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   }
 
   void _selectOption(String opt) {
-    setState(() {
-      _sel = opt;
-      _showYPicker = false;
-      _showPDrop = false;
-      _monthPicked = false;
-      _dayPicked = false;
-    });
-  }
+  setState(() {
+    _sel = opt;
+    _showYPicker = false;
+    _showPDrop = false;
+    _monthPicked = false;
+    _dayPicked = false;
+    if (!widget.editMode) {
+      _wDays = {'MONDAY': false, 'TUESDAY': false, 'WEDNESDAY': false, 'THURSDAY': false, 'FRIDAY': false, 'SATURDAY': false, 'SUNDAY': false};
+      _mDays = {};
+      _yDays = [];
+      _periodDays = 1;
+      _periodUnit = 'WEEK';
+      _repeatEvery = 1;
+    }
+  });
+}
 
   Widget _radio(String opt){
     final sel=_sel==opt;
