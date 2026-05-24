@@ -998,6 +998,16 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
     _savedRepeatEvery = widget.habit.freqRepeatEvery;
   }
 
+  static const _weekDayAbbr = {
+  'MONDAY': 'MON',
+  'TUESDAY': 'TUE',
+  'WEDNESDAY': 'WED',
+  'THURSDAY': 'THU',
+  'FRIDAY': 'FRI',
+  'SATURDAY': 'SAT',
+  'SUNDAY': 'SUN',
+  };
+
   static const _monthNames = [
     'JAN','FEB','MAR','APR','MAY','JUN',
     'JUL','AUG','SEP','OCT','NOV','DEC'
@@ -1013,14 +1023,69 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
   String _fmtDateShort(DateTime d) =>
       '${d.month}/${d.day}/${d.year % 100}';
 
+
   String _formatFrequency(String freq) {
-    if (freq == 'EVERY DAY' || freq.isEmpty) return 'EVERY DAY';
-    if (freq == 'REPEAT') return 'REPEAT';
-    if (freq == 'SOME DAYS PER PERIOD') return 'SOME DAYS PER PERIOD';
-    if (freq == 'SPECIFIC DAYS OF THE WEEK') return 'SPECIFIC DAYS OF THE WEEK';
-    if (freq == 'SPECIFIC DAYS OF THE MONTH') return 'SPECIFIC DAYS OF THE MONTH';
-    if (freq == 'SPECIFIC DAYS OF THE YEAR') return 'SPECIFIC DAYS OF THE YEAR';
-    return freq.toUpperCase();
+  if (freq == 'EVERY DAY' || freq.isEmpty) return 'EVERY DAY';
+  if (freq == 'REPEAT') return 'every $_savedRepeatEvery days';
+  if (freq == 'SOME DAYS PER PERIOD') {
+    final unit = _savedPeriodUnit.toLowerCase();
+    return '$_savedPeriodDays days per $unit';
+  }
+  if (freq == 'SPECIFIC DAYS OF THE WEEK') {
+    // Collect selected days in week order
+    final ordered = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
+    final selected = ordered.where((d) => _savedWeekDays[d] == true).toList();
+    if (selected.length == 7) return 'EVERY DAY';
+    if (selected.isEmpty) return 'SPECIFIC DAYS OF THE WEEK';
+    return selected.map((d) => _weekDayAbbr[d]!).join(' - ');
+  }
+  if (freq == 'SPECIFIC DAYS OF THE MONTH') {
+  if (_savedMonthDays.isEmpty) return 'SPECIFIC DAYS OF THE MONTH';
+  final sorted = _savedMonthDays.toList()..sort((a, b) {
+    if (a == 0) return 1;
+    if (b == 0) return -1;
+    return a.compareTo(b);
+  });
+  final parts = sorted.map((d) => d == 0 ? 'LAST DAY' : '$d').join(', ');
+  return 'DAYS OF MONTH : $parts';
+}
+  if (freq == 'SPECIFIC DAYS OF THE YEAR') return 'SPECIFIC DAYS OF THE YEAR';
+  return freq.toUpperCase();
+}
+
+ String _formatMonthDaysValues() {
+    if (_savedMonthDays.isEmpty) return '';
+    final sorted = _savedMonthDays.toList()..sort((a, b) {
+      if (a == 0) return 1;
+      if (b == 0) return -1;
+      return a.compareTo(b);
+    });
+    final parts = sorted.map((d) => d == 0 ? 'LAST DAY' : '$d').toList();
+    if (parts.length <= 4) {
+      return parts.join(', ');
+    } else {
+      return '${parts.take(4).join(', ')}...';
+    }
+  }
+
+  String _formatYearDaysValues() {
+    if (_savedYearDays.isEmpty) return '';
+    const abbr = [
+      'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
+      'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'
+    ];
+    final sorted = List<DateTime>.from(_savedYearDays)
+      ..sort((a, b) => a.month != b.month
+          ? a.month.compareTo(b.month)
+          : a.day.compareTo(b.day));
+    final parts = sorted
+        .map((d) => '${abbr[d.month - 1]} ${d.day}')
+        .toList();
+    if (parts.length <= 4) {
+      return parts.join(', ');
+    } else {
+      return '${parts.take(4).join(', ')}...';
+    }
   }
 
   Widget _buildDivider() => Container(height: 0.5, color: Colors.white12);
@@ -1627,12 +1692,94 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                       onTap: _showPriorityModal,
                     ),
                     _buildDivider(),
-
                     // 8. FREQUENCY
-                    _buildRow(
-                      label: 'FREQUENCY',
-                      right: _buildValueText(_formatFrequency(_frequency)),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
                       onTap: _editFrequency,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'FREQUENCY',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: _frequency == 'SPECIFIC DAYS OF THE MONTH'
+                                    ? Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        mainAxisAlignment: MainAxisAlignment.end,
+                                        children: [
+                                          const Text(
+                                            'DAYS OF MONTH : ',
+                                            maxLines: 1,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.3,
+                                            ),
+                                          ),
+                                          Flexible(
+                                            child: Text(
+                                              _formatMonthDaysValues().toUpperCase(),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              softWrap: false,
+                                              textAlign: TextAlign.right,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.3,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : _frequency == 'SPECIFIC DAYS OF THE YEAR'
+                                      ? Text(
+                                          _formatYearDaysValues().toUpperCase(),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          softWrap: false,
+                                          textAlign: TextAlign.right,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        )
+                                      : SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          reverse: true,
+                                          child: Text(
+                                            _formatFrequency(_frequency).toUpperCase(),
+                                            maxLines: 1,
+                                            softWrap: false,
+                                            textAlign: TextAlign.right,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              letterSpacing: 0.3,
+                                            ),
+                                          ),
+                                        ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     _buildDivider(),
 
@@ -2313,24 +2460,143 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
     ]);
   }
 
-  Widget _periodUI(){
-    return Padding(padding:const EdgeInsets.only(left:32,top:8,bottom:4),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
-        SizedBox(width:44,child:TextField(keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.only(bottom:2),border:InputBorder.none),controller:TextEditingController(text:'$_periodDays')..selection=TextSelection.collapsed(offset:'$_periodDays'.length),onChanged:(v){final n=int.tryParse(v);if(n!=null&&n>0)setState(()=>_periodDays=n);})),
-        const SizedBox(width:12),
-        const Text('DAYS PER',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5)),
-        const SizedBox(width:12),
-        GestureDetector(onTap:()=>setState(()=>_showPDrop=!_showPDrop),child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[Text(_periodUnit,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5)),const SizedBox(width:6),const Icon(Icons.keyboard_arrow_down,color:Colors.white,size:22)])),
-      ]),
-      if(_showPDrop)Padding(padding:const EdgeInsets.only(top:8,left:120),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:['WEEK','MONTH','YEAR'].map((u)=>GestureDetector(onTap:()=>setState((){_periodUnit=u;_showPDrop=false;}),child:Padding(padding:const EdgeInsets.only(bottom:6),child:Text(u,style:TextStyle(color:_periodUnit==u?Colors.white:Colors.white54,fontSize:15,fontWeight:FontWeight.w700,letterSpacing:0.5))))).toList())),
-    ]));
+  Widget _periodUI() {
+    int _maxForUnit() {
+      if (_periodUnit == 'WEEK') return 7;
+      if (_periodUnit == 'MONTH') return 28;
+      return 365;
+    }
+
+    void _validateAndSet(String v) {
+    final n = int.tryParse(v);
+    if (n != null && n > 0) setState(() => _periodDays = n);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 32, top: 8, bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Number input ──
+          SizedBox(
+            width: 44,
+            child: TextField(
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                decoration: TextDecoration.underline,
+                decorationColor: Colors.white,
+              ),
+              decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.only(bottom: 2),
+                border: InputBorder.none,
+              ),
+              controller: TextEditingController(text: '$_periodDays')
+                ..selection =
+                    TextSelection.collapsed(offset: '$_periodDays'.length),
+              onChanged: _validateAndSet,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // ── "DAYS PER" label ──
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              'DAYS PER',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // ── Unit selector + dropdown stacked in its own Column ──
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // The trigger row: WEEK ▼
+              GestureDetector(
+                onTap: () => setState(() => _showPDrop = !_showPDrop),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      _periodUnit,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ],
+                ),
+              ),
+              // The dropdown options — appear directly below the trigger
+              if (_showPDrop)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: ['WEEK', 'MONTH', 'YEAR']
+                        .where((u) => u != _periodUnit)
+                        .map((u) {
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() {
+                          _periodUnit = u;
+                          _showPDrop = false;
+                          final max =
+                              u == 'WEEK' ? 7 : u == 'MONTH' ? 28 : 365;
+                          if (_periodDays > max) _periodDays = max;
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Text(
+                            u,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _repeatUI(){
     return Padding(padding:const EdgeInsets.only(left:48,top:8,bottom:4),child:Row(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.center,children:[
       const Text('EVERY',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5)),
       const SizedBox(width:12),
-      SizedBox(width:44,child:TextField(keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.only(bottom:2),border:InputBorder.none),controller:TextEditingController(text:'$_repeatEvery')..selection=TextSelection.collapsed(offset:'$_repeatEvery'.length),onChanged:(v){final n=int.tryParse(v);if(n!=null&&n>0)setState(()=>_repeatEvery=n);})),
+      SizedBox(width:44,child:TextField(keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.only(bottom:2),border:InputBorder.none),controller:TextEditingController(text:'$_repeatEvery')..selection=TextSelection.collapsed(offset:'$_repeatEvery'.length),onChanged: (v) {
+  final n = int.tryParse(v);
+  if (n != null && n > 0) setState(() => _repeatEvery = n);
+},)),
       const SizedBox(width:12),
       const Text('DAYS',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5)),
     ]));
@@ -2339,58 +2605,262 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
   void _alert(String msg){showDialog(context:context,builder:(_)=>AlertDialog(backgroundColor:const Color(0xFF2C2C2C),title:Text(msg,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('OK',style:TextStyle(color:Colors.white)))]));}
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(backgroundColor:Colors.black,body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,32,24,24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      const Text('PREFERRED FREQUENCY?',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5)),
-      const SizedBox(height:20),
-      Expanded(child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        _radio('EVERY DAY'),
-        _radio('SPECIFIC DAYS OF THE WEEK'),if(_sel=='SPECIFIC DAYS OF THE WEEK')_wDaysUI(),
-        _radio('SPECIFIC DAYS OF THE MONTH'),if(_sel=='SPECIFIC DAYS OF THE MONTH')_mDaysUI(),
-        _radio('SPECIFIC DAYS OF THE YEAR'),if(_sel=='SPECIFIC DAYS OF THE YEAR')_yDaysUI(),
-        _radio('SOME DAYS PER PERIOD'),if(_sel=='SOME DAYS PER PERIOD')_periodUI(),
-        _radio('REPEAT'),if(_sel=='REPEAT')_repeatUI(),
-      ]))),
-      const SizedBox(height:16),
-      if(widget.editMode)...[
-        const SizedBox(height:8),
-        Container(height:0.5,color:Colors.white12),
-        IntrinsicHeight(child:Row(children:[
-          Expanded(child:GestureDetector(
-            behavior:HitTestBehavior.opaque,
-            onTap:()=>Navigator.pop(context,null),
-            child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:20),child:const Center(child:Text('CLOSE',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
-          )),
-          Container(width:0.5,color:Colors.white12),
-          Expanded(child:GestureDetector(
-            behavior:HitTestBehavior.opaque,
-            onTap:(){
-              if(_sel=='SPECIFIC DAYS OF THE WEEK'&&!_wDays.values.any((v)=>v)){_alert('Select at least one day');return;}
-              if(_sel=='SPECIFIC DAYS OF THE MONTH'&&_mDays.isEmpty){_alert('Select at least one day');return;}
-              if(_sel=='SPECIFIC DAYS OF THE YEAR'&&_yDays.isEmpty){_alert('Select at least one day');return;}
-              Navigator.pop(context,_FrequencyEditResult(frequency:_sel,weekDays:Map.from(_wDays),monthDays:Set.from(_mDays),yearDays:List.from(_yDays),periodDays:_periodDays,periodUnit:_periodUnit,repeatEvery:_repeatEvery));
-            },
-            child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:20),child:const Center(child:Text('CONFIRM',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
-          )),
-        ])),
-      ] else ...[
-        Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
-          GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
-          Row(children:[Container(width:8,height:8,decoration:const BoxDecoration(color:Colors.white,shape:BoxShape.circle)),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.white,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1))),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.transparent,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1)))]),
-          GestureDetector(onTap:()async{
-            if(_sel=='SPECIFIC DAYS OF THE WEEK'&&!_wDays.values.any((v)=>v)){_alert('Select at least one day');return;}
-            if(_sel=='SPECIFIC DAYS OF THE MONTH'&&_mDays.isEmpty){_alert('Select at least one day');return;}
-            if(_sel=='SPECIFIC DAYS OF THE YEAR'&&_yDays.isEmpty){_alert('Select at least one day');return;}
-            final res=await Navigator.push<HabitScheduleResult>(context,MaterialPageRoute(builder:(_)=>_ScheduleScreen(category:widget.category,title:widget.title,description:widget.description,frequency:_sel,initialStartDate:widget.startDate)));
-            if(res!=null&&context.mounted){
-              final enriched=HabitScheduleResult(title:res.title,description:res.description,category:res.category,startDate:res.startDate,frequency:res.frequency,endDate:res.endDate,priority:res.priority,reminders:res.reminders,freqWeekDays:Map.from(_wDays),freqMonthDays:Set.from(_mDays),freqYearDays:List.from(_yDays),freqPeriodDays:_periodDays,freqPeriodUnit:_periodUnit,freqRepeatEvery:_repeatEvery);
-              Navigator.pop(context,enriched);
-            }
-          },child:const Text('NEXT',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
-        ]),
-      ],
-    ]))));
+    Widget build(BuildContext context) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── All padded content ──
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'PREFERRED FREQUENCY?',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _radio('EVERY DAY'),
+                              _radio('SPECIFIC DAYS OF THE WEEK'),
+                              if (_sel == 'SPECIFIC DAYS OF THE WEEK') _wDaysUI(),
+                              _radio('SPECIFIC DAYS OF THE MONTH'),
+                              if (_sel == 'SPECIFIC DAYS OF THE MONTH') _mDaysUI(),
+                              _radio('SPECIFIC DAYS OF THE YEAR'),
+                              if (_sel == 'SPECIFIC DAYS OF THE YEAR') _yDaysUI(),
+                              _radio('SOME DAYS PER PERIOD'),
+                              if (_sel == 'SOME DAYS PER PERIOD') _periodUI(),
+                              _radio('REPEAT'),
+                              if (_sel == 'REPEAT') _repeatUI(),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // ── Non-editMode: BACK / dots / NEXT ──
+                      if (!widget.editMode)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              GestureDetector(
+                                onTap: () => Navigator.pop(context, null),
+                                child: const Text(
+                                  'BACK',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              Row(children: [
+                                Container(
+                                  width: 8, height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 8, height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white38, width: 1),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 8, height: 8,
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white38, width: 1),
+                                  ),
+                                ),
+                              ]),
+                              GestureDetector(
+                                onTap: () async {
+                                  if (_sel == 'SPECIFIC DAYS OF THE WEEK' && !_wDays.values.any((v) => v)) {
+                                    _alert('Select at least one day');
+                                    return;
+                                  }
+                                  if (_sel == 'SPECIFIC DAYS OF THE MONTH' && _mDays.isEmpty) {
+                                    _alert('Select at least one day');
+                                    return;
+                                  }
+                                  if (_sel == 'SPECIFIC DAYS OF THE YEAR' && _yDays.isEmpty) {
+                                    _alert('Select at least one day');
+                                    return;
+                                  }
+                                  final res = await Navigator.push<HabitScheduleResult>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => _ScheduleScreen(
+                                        category: widget.category,
+                                        title: widget.title,
+                                        description: widget.description,
+                                        frequency: _sel,
+                                        initialStartDate: widget.startDate,
+                                      ),
+                                    ),
+                                  );
+                                  if (res != null && context.mounted) {
+                                    final enriched = HabitScheduleResult(
+                                      title: res.title,
+                                      description: res.description,
+                                      category: res.category,
+                                      startDate: res.startDate,
+                                      frequency: res.frequency,
+                                      endDate: res.endDate,
+                                      priority: res.priority,
+                                      reminders: res.reminders,
+                                      freqWeekDays: Map.from(_wDays),
+                                      freqMonthDays: Set.from(_mDays),
+                                      freqYearDays: List.from(_yDays),
+                                      freqPeriodDays: _periodDays,
+                                      freqPeriodUnit: _periodUnit,
+                                      freqRepeatEvery: _repeatEvery,
+                                    );
+                                    Navigator.pop(context, enriched);
+                                  }
+                                },
+                                child: const Text(
+                                  'NEXT',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── EditMode bottom row: outside all padding for true edge-to-edge ──
+              if (widget.editMode) ...[
+                // Full-width top divider — no padding on either side
+                Container(height: 0.5, color: Colors.white24),
+                // Full-width Close | Confirm row
+                IntrinsicHeight(
+                  child: Row(
+                    children: [
+                      // ── LEFT: CLOSE ──
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.pop(context, null),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: const Center(
+                              child: Text(
+                                'CLOSE',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // ── Vertical divider ──
+                      Container(width: 0.5, color: Colors.white24),
+                      // ── RIGHT: CONFIRM ──
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+  if (_sel == 'SPECIFIC DAYS OF THE WEEK' && !_wDays.values.any((v) => v)) {
+    _alert('Select at least one day');
+    return;
   }
+  if (_sel == 'SPECIFIC DAYS OF THE MONTH' && _mDays.isEmpty) {
+    _alert('Select at least one day');
+    return;
+  }
+  if (_sel == 'SPECIFIC DAYS OF THE YEAR' && _yDays.isEmpty) {
+    _alert('Select at least one day');
+    return;
+  }
+  if (_sel == 'SOME DAYS PER PERIOD') {
+    final max = _periodUnit == 'WEEK' ? 7 : _periodUnit == 'MONTH' ? 28 : 365;
+    if (_periodDays > max) {
+      _alert('enter a frequency less than or equal to $max');
+      return;
+    }
+  }
+  if (_sel == 'REPEAT') {
+    if (_repeatEvery > 365) {
+      _alert('enter a frequency less than or equal to 365');
+      return;
+    }
+  }
+  Navigator.pop(
+    context,
+    _FrequencyEditResult(
+      frequency: _sel,
+      weekDays: Map.from(_wDays),
+      monthDays: Set.from(_mDays),
+      yearDays: List.from(_yDays),
+      periodDays: _periodDays,
+      periodUnit: _periodUnit,
+      repeatEvery: _repeatEvery,
+    ),
+  );
+},
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 20),
+                            child: const Center(
+                              child: Text(
+                                'CONFIRM',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
 }
 
 // ─── Schedule Screen ──────────────────────────────────────────────────────────
@@ -2410,7 +2880,13 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
   String _lbl()=>_startIsToday?'TODAY':_fmt(_start);
   DateTime _compEnd(){final n=int.tryParse(_dCtrl.text)??60;return _start.add(Duration(days:n));}
   Widget _pill(String l)=>Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:6),decoration:BoxDecoration(color:const Color(0xFF2C2C2C),borderRadius:BorderRadius.circular(20)),child:Text(l,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700,letterSpacing:0.3)));
-  Widget _row(String l,Widget r)=>Column(children:[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(l,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.3)),r]))]);
+  Widget _row(String l, Widget r, {VoidCallback? onRowTap}) {
+  final inner = Column(children:[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(l,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.3)),r]))]);
+  if (onRowTap != null) {
+    return GestureDetector(behavior:HitTestBehavior.opaque,onTap:onRowTap,child:inner);
+  }
+  return inner;
+}
   Future<void> _pickS()async{final p=await showDatePicker(context:context,initialDate:_start,firstDate:DateTime(2000),lastDate:DateTime(2100),builder:(c,ch)=>Theme(data:ThemeData.dark().copyWith(colorScheme:const ColorScheme.dark(primary:Colors.white,onPrimary:Colors.black,surface:Color(0xFF2C2C2C),onSurface:Colors.white)),child:ch!));if(p!=null){setState((){_start=p;final n=DateTime.now();_startIsToday=p.year==n.year&&p.month==n.month&&p.day==n.day;_end=_compEnd();});}}
   Future<void> _pickE()async{final p=await showDatePicker(context:context,initialDate:_end??_start.add(const Duration(days:60)),firstDate:_start,lastDate:DateTime(2100),builder:(c,ch)=>Theme(data:ThemeData.dark().copyWith(colorScheme:const ColorScheme.dark(primary:Colors.white,onPrimary:Colors.black,surface:Color(0xFF2C2C2C),onSurface:Colors.white)),child:ch!));if(p!=null){setState((){_end=p;_dCtrl.text='${p.difference(_start).inDays}';});}}
   void _showR(){showDialog(context:context,barrierColor:Colors.black54,builder:(_)=>_RemindersModal(reminders:_reminders,onChanged:(u)=>setState((){_reminders.clear();_reminders.addAll(u);})));}
@@ -2422,11 +2898,11 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
     return Scaffold(backgroundColor:Colors.black,body:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(24,32,24,24),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('WHEN DO YOU WANT\nTO DO IT?',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:0.5,height:1.2)),
       const SizedBox(height:28),
-      _row('START DATE',GestureDetector(onTap:_pickS,child:_pill(_lbl()))),
-      _row('END DATE',Switch(value:_endEnabled,onChanged:(v)=>setState((){_endEnabled=v;if(v)_end=_compEnd();}),activeColor:Colors.white,activeTrackColor:const Color(0xFF555555),inactiveThumbColor:Colors.white38,inactiveTrackColor:const Color(0xFF333333))),
+      _row('START DATE',GestureDetector(onTap:_pickS,child:_pill(_lbl())),onRowTap:_pickS),
+      _row('END DATE',Switch(value:_endEnabled,onChanged:(v)=>setState((){_endEnabled=v;if(v)_end=_compEnd();}),activeColor:Colors.white,activeTrackColor:const Color(0xFF555555),inactiveThumbColor:Colors.white38,inactiveTrackColor:const Color(0xFF333333)),onRowTap:()=>setState((){_endEnabled=!_endEnabled;if(_endEnabled)_end=_compEnd();})),
       if(_endEnabled)...[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[GestureDetector(onTap:_pickE,child:_pill(ed)),const SizedBox(width:16),SizedBox(width:80,child:TextField(controller:_dCtrl,keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.symmetric(vertical:2),border:InputBorder.none),onChanged:(v){if(v.trim().isEmpty){setState(()=>_end=DateTime.now());return;}final n=int.tryParse(v);if(n!=null&&n>0)setState(()=>_end=_start.add(Duration(days:n)));})),const SizedBox(width:16),const Text('DAYS',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5))]))],
-      _row('TIME AND REMINDERS',GestureDetector(onTap:_showR,child:Container(width:32,height:32,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:Center(child:Text('${_reminders.length}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)))))),
-      _row('PRIORITY',GestureDetector(onTap:_showP,child:_pill(_priority==1?'DEFAULT':'${_priority}🏳'))),
+      _row('TIME AND REMINDERS',GestureDetector(onTap:_showR,child:Container(width:32,height:32,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:Center(child:Text('${_reminders.length}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700))))),onRowTap:_showR),
+      _row('PRIORITY',GestureDetector(onTap:_showP,child:_pill(_priority==1?'DEFAULT':'${_priority}🏳')),onRowTap:_showP),
       const Spacer(),
       Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
         GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
