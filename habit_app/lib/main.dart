@@ -820,13 +820,17 @@ class _CategorySelectDialog extends StatefulWidget {
   const _CategorySelectDialog({required this.onSelected});
   @override State<_CategorySelectDialog> createState() => _CategorySelectDialogState();
 }
+
 class _CategorySelectDialogState extends State<_CategorySelectDialog> {
   final _scrollCtrl = ScrollController();
-  static const _categories = [
+  static const _defaultCategories = [
     'MEDITATION','SPORT','ENTERTAINMENT','ART','STUDY',
     'QUIT A BAD HABIT',
   ];
+  List<String> _customCategories = [];
   static const _manageCategory = 'MANAGE CATEGORIES';
+
+  List<String> get _categories => [..._customCategories, ..._defaultCategories];
   static const double _rowHeight = 52.0;
   static const int _maxVisible = 5;
 
@@ -915,7 +919,19 @@ class _CategorySelectDialogState extends State<_CategorySelectDialog> {
             // Sticky: Manage Categories
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () { widget.onSelected(_manageCategory); Navigator.pop(context); },
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(
+                    builder: (_) => _CategoriesScreen(
+                      customCategories: _customCategories,
+                      onChanged: (updated) {
+                        setState(() => _customCategories = updated);
+                      },
+                    ),
+                  ),
+                );
+              },
               child: SizedBox(
                 height: _rowHeight,
                 child: Center(
@@ -943,6 +959,544 @@ class _CategorySelectDialogState extends State<_CategorySelectDialog> {
     );
   }
 }
+
+
+
+
+class _NewCategorySheet extends StatefulWidget {
+  final List<String> existingCustom;
+  const _NewCategorySheet({required this.existingCustom});
+  @override State<_NewCategorySheet> createState() => _NewCategorySheetState();
+}
+
+class _NewCategorySheetState extends State<_NewCategorySheet> {
+  String _sheetTitle = 'NEW CATEGORY';
+  String _enteredName = '';
+
+  final TextEditingController _nameController = TextEditingController();
+
+  Future<void> _openCategoryNameDialog() async {
+    _nameController.text = _enteredName;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return Dialog(
+          backgroundColor: const Color(0xFF2C2C2C),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: TextField(
+                    controller: _nameController,
+                    autofocus: true,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      UpperCaseTextFormatter(),
+                    ],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'CATEGORY NAME',
+                      hintStyle: TextStyle(
+                        color: Colors.white38,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 22),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'CANCEL',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.pop(
+                            context,
+                            _nameController.text.trim().toUpperCase(),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'OK',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null) return;
+
+    setState(() {
+      _enteredName = result;
+      _sheetTitle = result;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 0),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Text(_sheetTitle,
+              style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 28),
+
+Container(height: 0.5, color: Colors.white12),
+
+// CATEGORY NAME ROW
+GestureDetector(
+  behavior: HitTestBehavior.opaque,
+  onTap: _openCategoryNameDialog,
+  child: Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(
+      horizontal: 20,
+      vertical: 22,
+    ),
+    child: const Text(
+      'CATEGORY NAME',
+      style: TextStyle(
+        color: Colors.white,
+        fontSize: 17,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 0.5,
+      ),
+    ),
+  ),
+),
+
+Container(height: 0.5, color: Colors.white12),
+
+const SizedBox(height: 48),
+
+Container(height: 0.5, color: Colors.white12),
+
+// CREATE CATEGORY BUTTON
+GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+  final trimmed = _enteredName.trim();
+
+  // Prevent empty names
+  if (trimmed.isEmpty) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Center(
+                  child: Text(
+                    'enter a name',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: const Center(
+                    child: Text(
+                      'OK',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return;
+  }
+
+  // Case-insensitive duplicate check
+  final normalized = trimmed.toLowerCase();
+
+  final isDuplicate = widget.existingCustom.any(
+    (c) => c.trim().toLowerCase() == normalized,
+  );
+
+  // Duplicate popup
+  if (isDuplicate) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Center(
+                  child: Text(
+                    'Name already exists',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: const Center(
+                    child: Text(
+                      'OK',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return;
+  }
+
+  // Close bottom sheet with existing downward animation
+  Navigator.of(context).pop(trimmed);
+
+  // Success popup AFTER sheet closes
+  Future.delayed(const Duration(milliseconds: 250), () {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('category created'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  });
+},
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: const Center(
+                child: Text(
+                  'CREATE CATEGORY',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+}
+
+
+
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
+    );
+  }
+}
+
+
+
+// ─── Categories Screen ────────────────────────────────────────────────────────
+
+class _CategoriesScreen extends StatefulWidget {
+  final List<String> customCategories;
+  final void Function(List<String>) onChanged;
+  const _CategoriesScreen({required this.customCategories, required this.onChanged});
+  @override State<_CategoriesScreen> createState() => _CategoriesScreenState();
+}
+
+class _CategoriesScreenState extends State<_CategoriesScreen> {
+  late List<String> _custom;
+  static const _defaults = [
+    'MEDITATION', 'SPORT', 'ENTERTAINMENT', 'ART', 'STUDY', 'QUIT A BAD HABIT',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _custom = List.from(widget.customCategories);
+  }
+
+  void _openNewCategorySheet() {
+  showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    useRootNavigator: true,
+    builder: (_) => _NewCategorySheet(existingCustom: List.from(_custom)),
+  ).then((name) {
+      if (name == null || !mounted) return;
+      setState(() => _custom.add(name));
+      widget.onChanged(List.from(_custom));
+      showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          backgroundColor: const Color(0xFF2C2C2C),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Center(child: Text('category created', textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.pop(context),
+                child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: const Center(child: Text('OK', textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+              ),
+            ]),
+          ),
+        ),
+      );
+    });
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    ),
+                  ),
+                  const Text(
+                    'CATEGORIES',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                        'CUSTOM CATEGORIES',
+                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                      ),
+                      const SizedBox(height: 24),   // ← NEW: increased gap
+                      if (_custom.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          'THERE ARE NO CUSTOM CATEGORIES',
+                          style: TextStyle(color: Colors.white38, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                        ),
+                      )
+                    else
+                      ..._custom.map((c) => Padding(
+                        padding: const EdgeInsets.only(bottom: 18),
+                        child: Text(
+                          c,
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                        ),
+                      )),
+                    const SizedBox(height: 8),
+                    // ── REPLACE WITH ──
+                    const Text(
+                      'DEFAULT CATEGORIES',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 24),   // ← NEW: increased gap
+                    ..._defaults.map((c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: Text(
+                        c,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openNewCategorySheet,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                color: Colors.black,
+                child: const Center(
+                  child: Text(
+                    'NEW CATEGORY',
+                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 
 class _FrequencyEditResult {
@@ -1274,7 +1828,7 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
   Future<void> _pickEndDate() async {
     final p = await showDatePicker(
       context: context,
-      initialDate: widget.habit.endDate ?? widget.habit.startDate.add(const Duration(days: 60)),
+      initialDate: widget.habit.endDate ?? widget.habit.startDate.add(const Duration(days: 1)),
       firstDate: widget.habit.startDate,
       lastDate: DateTime(2100),
       builder: (c, ch) => Theme(
