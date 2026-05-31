@@ -2,9 +2,72 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:math' as math;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
-void main() => runApp(const HabitApp());
+
+// ─── Category Persistence ─────────────────────────────────────────────────────
+
+class CategoryStore {
+  static const _key = 'custom_categories';
+  static List<String> _cache = [];
+
+  /// Must be called once before runApp().
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _cache = prefs.getStringList(_key) ?? [];
+  }
+
+  /// Synchronous snapshot of stored custom categories.
+  static List<String> get custom => List<String>.from(_cache);
+
+  static bool exists(String name) {
+    final n = name.trim().toLowerCase();
+    return _cache.any((c) => c.trim().toLowerCase() == n);
+  }
+
+  /// Adds + persists. No-op on empty or duplicate (case-insensitive).
+  static Future<void> add(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty || exists(trimmed)) return;
+    _cache = [..._cache, trimmed];
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, _cache);
+  }
+
+  static Future<void> rename(String oldName, String newName) async {
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) return;
+    final oldLower = oldName.trim().toLowerCase();
+    final idx = _cache.indexWhere((c) => c.trim().toLowerCase() == oldLower);
+    if (idx == -1) return;
+    final newLower = trimmed.toLowerCase();
+    for (int i = 0; i < _cache.length; i++) {
+      if (i != idx && _cache[i].trim().toLowerCase() == newLower) return;
+    }
+    final updated = List<String>.from(_cache);
+    updated[idx] = trimmed;
+    _cache = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, _cache);
+  }
+
+  /// Removes + persists (case-insensitive). Same _key, same prefs list.
+  static Future<void> remove(String name) async {
+    final lower = name.trim().toLowerCase();
+    final before = _cache.length;
+    _cache = _cache.where((c) => c.trim().toLowerCase() != lower).toList();
+    if (_cache.length == before) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, _cache);
+  }
+
+}
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await CategoryStore.init();
+  runApp(const HabitApp());
+}
 
 class HabitApp extends StatelessWidget {
   const HabitApp({super.key});
@@ -827,7 +890,7 @@ class _CategorySelectDialogState extends State<_CategorySelectDialog> {
     'MEDITATION','SPORT','ENTERTAINMENT','ART','STUDY',
     'QUIT A BAD HABIT',
   ];
-  List<String> _customCategories = [];
+  List<String> _customCategories = CategoryStore.custom;
   static const _manageCategory = 'MANAGE CATEGORIES';
 
   List<String> get _categories => [..._customCategories, ..._defaultCategories];
@@ -982,108 +1045,155 @@ class _NewCategorySheetState extends State<_NewCategorySheet> {
       context: context,
       barrierDismissible: false,
       builder: (_) {
+        // ── Tune these two values to vertically center the text ──
+        const double inputTopPadding = 16;     // space ABOVE the text
+        const double inputBottomPadding = 16;  // space BELOW the text
         return Dialog(
           backgroundColor: const Color(0xFF2C2C2C),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 28),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(22),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: TextField(
-                    controller: _nameController,
-                    autofocus: true,
-                    textCapitalization: TextCapitalization.characters,
-                    inputFormatters: [
-                      UpperCaseTextFormatter(),
-                    ],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      hintText: 'CATEGORY NAME',
-                      hintStyle: TextStyle(
-                        color: Colors.white38,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
+
+                // TITLE
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text(
+                      'CATEGORY NAME',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 22),
+                // TOP DIVIDER
+                Container(
+                  height: 0.5,
+                  color: Colors.white24,
+                ),
 
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: Colors.white24),
-                          ),
+                // INPUT AREA
+                // INPUT AREA
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: MediaQuery.of(context).size.width * 0.03,
+                    right: MediaQuery.of(context).size.width * 0.03,
+                    top: 26,
+                    bottom: 26,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white24,
+                        width: 1,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _nameController,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [
+                        UpperCaseTextFormatter(),
+                      ],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                      maxLines: 1,
+                      cursorColor: Colors.white,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: '',
+                        contentPadding: EdgeInsets.fromLTRB(
+                          16,                   // left inset
+                          inputTopPadding,      // ← top spacing
+                          16,                   // right inset
+                          inputBottomPadding,   // ← bottom spacing
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // BOTTOM DIVIDER
+                Container(
+                  height: 0.5,
+                  color: Colors.white24,
+                ),
+
+                SizedBox(
+                  height: 74,
+                  child: Row(
+                    children: [
+
+                      // CANCEL
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            Navigator.pop(context);
+                          },
                           child: const Center(
                             child: Text(
                               'CANCEL',
                               style: TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.4,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(width: 12),
+                      // CENTER DIVIDER
+                      Container(
+                        width: 0.5,
+                        color: Colors.white24,
+                      ),
 
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          Navigator.pop(
-                            context,
-                            _nameController.text.trim().toUpperCase(),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
+                      // OK
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            Navigator.pop(
+                              context,
+                              _nameController.text.trim().toUpperCase(),
+                            );
+                          },
                           child: const Center(
                             child: Text(
                               'OK',
                               style: TextStyle(
-                                color: Colors.black,
+                                color: Colors.white,
+                                fontSize: 17,
                                 fontWeight: FontWeight.w800,
-                                letterSpacing: 0.4,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1288,16 +1398,6 @@ GestureDetector(
 
   // Close bottom sheet with existing downward animation
   Navigator.of(context).pop(trimmed);
-
-  // Success popup AFTER sheet closes
-  Future.delayed(const Duration(milliseconds: 250), () {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('category created'),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  });
 },
             child: Container(
               width: double.infinity,
@@ -1312,6 +1412,310 @@ GestureDetector(
                     letterSpacing: 0.5,
                   ),
                 ),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _EditCategorySheet extends StatefulWidget {
+  final String initialName;
+  final void Function(String oldName, String newName) onRename;
+  final void Function(String name) onDelete;
+  const _EditCategorySheet({
+    required this.initialName,
+    required this.onRename,
+    required this.onDelete,
+  });
+  @override State<_EditCategorySheet> createState() => _EditCategorySheetState();
+}
+
+class _EditCategorySheetState extends State<_EditCategorySheet> {
+  late String _currentName;
+  final TextEditingController _nameController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentName = widget.initialName;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  // Same name-input dialog as Create: same uppercase formatter, OK/CANCEL,
+  // and the same trim().toUpperCase() commit behavior. (Req 3)
+  Future<void> _openCategoryNameDialog() async {
+    _nameController.text = _currentName;
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        const double inputTopPadding = 16;
+        const double inputBottomPadding = 16;
+        return Dialog(
+          backgroundColor: const Color(0xFF2C2C2C),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('CATEGORY NAME',
+                      style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  ),
+                ),
+                Container(height: 0.5, color: Colors.white24),
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: MediaQuery.of(context).size.width * 0.03,
+                    right: MediaQuery.of(context).size.width * 0.03,
+                    top: 26,
+                    bottom: 26,
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111111),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24, width: 1),
+                    ),
+                    child: TextField(
+                      controller: _nameController,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      inputFormatters: [UpperCaseTextFormatter()],
+                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                      maxLines: 1,
+                      cursorColor: Colors.white,
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: '',
+                        contentPadding: EdgeInsets.fromLTRB(16, inputTopPadding, 16, inputBottomPadding),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(height: 0.5, color: Colors.white24),
+                SizedBox(
+                  height: 74,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.pop(context),
+                          child: const Center(
+                            child: Text('CANCEL',
+                              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                          ),
+                        ),
+                      ),
+                      Container(width: 0.5, color: Colors.white24),
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => Navigator.pop(context, _nameController.text.trim().toUpperCase()),
+                          child: const Center(
+                            child: Text('OK',
+                              style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (result == null) return; // CANCEL
+
+    final trimmed = result.trim();
+
+    // Same empty validation/popup as Create.
+    if (trimmed.isEmpty) {
+      _showInfoDialog('enter a name');
+      return;
+    }
+
+    // No change → do nothing.
+    if (trimmed.toLowerCase() == _currentName.trim().toLowerCase()) return;
+
+    // Same duplicate validation/popup as Create (excluding the current name).
+    final normalized = trimmed.toLowerCase();
+    final isDuplicate = CategoryStore.custom.any((c) =>
+        c.trim().toLowerCase() != _currentName.trim().toLowerCase() &&
+        c.trim().toLowerCase() == normalized);
+    if (isDuplicate) {
+      _showInfoDialog('Name already exists');
+      return;
+    }
+
+    final oldName = _currentName;
+    widget.onRename(oldName, trimmed);          // persist + refresh in parent
+    setState(() => _currentName = trimmed);     // live-update sheet title
+  }
+
+  void _showInfoDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: Center(
+                child: Text(message, textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Center(child: Text('OK', textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  // Confirmation before delete. (Req 4)
+  void _confirmDelete() {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+              child: Center(
+                child: Text('Are you sure you want to delete this category?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            IntrinsicHeight(child: Row(children: [
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.pop(context), // NO → close dialog only
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: const Center(child: Text('NO',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
+                  ),
+                ),
+              ),
+              Container(width: 0.5, color: Colors.white24),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.pop(context);          // close confirm dialog
+                    widget.onDelete(_currentName);   // persist + refresh in parent
+                    Navigator.pop(context);          // close edit bottom sheet
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: const Center(child: Text('YES',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
+                  ),
+                ),
+              ),
+            ])),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Grab handle — same as Create sheet.
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 0),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          // Top title = category name.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            child: Text(_currentName,
+              style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 28),
+          Container(height: 0.5, color: Colors.white12),
+          // CATEGORY NAME row → rename dialog.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _openCategoryNameDialog,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+              child: const Text('CATEGORY NAME',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+            ),
+          ),
+          Container(height: 0.5, color: Colors.white12),
+          const SizedBox(height: 48),
+          Container(height: 0.5, color: Colors.white12),
+          // DELETE CATEGORY (where CREATE CATEGORY is on the Create sheet).
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _confirmDelete,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: const Center(
+                child: Text('DELETE CATEGORY',
+                  style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
               ),
             ),
           ),
@@ -1354,6 +1758,17 @@ class _CategoriesScreenState extends State<_CategoriesScreen> {
     'MEDITATION', 'SPORT', 'ENTERTAINMENT', 'ART', 'STUDY', 'QUIT A BAD HABIT',
   ];
 
+  // ── Scroll support for >5 custom categories (Requirement 1) ──
+  final ScrollController _customScrollCtrl = ScrollController();
+  static const double _customRowHeight = 37.0; // Text(16px) + 18px bottom padding ≈ one row
+  static const int _maxVisibleCustom = 5;
+
+  @override
+  void dispose() {
+    _customScrollCtrl.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1367,9 +1782,11 @@ class _CategoriesScreenState extends State<_CategoriesScreen> {
     isScrollControlled: true,
     useRootNavigator: true,
     builder: (_) => _NewCategorySheet(existingCustom: List.from(_custom)),
-  ).then((name) {
+    ).then((name) async {
       if (name == null || !mounted) return;
-      setState(() => _custom.add(name));
+      await CategoryStore.add(name);
+      if (!mounted) return;
+      setState(() => _custom = CategoryStore.custom);
       widget.onChanged(List.from(_custom));
       showDialog(
         context: context,
@@ -1398,6 +1815,103 @@ class _CategoriesScreenState extends State<_CategoriesScreen> {
         ),
       );
     });
+  }
+
+  // Tappable custom-category row. Styling identical to the original row
+  // (Padding bottom:18 + same Text). GestureDetector only adds the tap (Req 2);
+  // HitTestBehavior.opaque means no visual change.
+  Widget _buildCustomCategoryRow(String c) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openEditCategorySheet(c),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.only(bottom: 18),
+        child: Text(
+          c,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomSection() {
+    // Empty state — unchanged.
+    if (_custom.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: Text(
+          'THERE ARE NO CUSTOM CATEGORIES',
+          style: TextStyle(color: Colors.white38, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+        ),
+      );
+    }
+
+    final rows = _custom.map(_buildCustomCategoryRow).toList();
+
+    // 5 or fewer → behave exactly as before (no scroll, no bounded height).
+    if (_custom.length <= _maxVisibleCustom) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows,
+      );
+    }
+
+    // More than 5 → bounded, scrollable both ways, with a visible scrollbar.
+    return SizedBox(
+      height: _customRowHeight * _maxVisibleCustom,
+      child: ScrollbarTheme(
+        data: ScrollbarThemeData(
+          thumbColor: WidgetStateProperty.all(Colors.white54),
+          trackColor: WidgetStateProperty.all(Colors.white12),
+          trackBorderColor: WidgetStateProperty.all(Colors.transparent),
+          thickness: WidgetStateProperty.all(4),
+          radius: const Radius.circular(2),
+          thumbVisibility: WidgetStateProperty.all(true),
+          trackVisibility: WidgetStateProperty.all(true),
+        ),
+        child: Scrollbar(
+          controller: _customScrollCtrl,
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            controller: _customScrollCtrl,
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: rows,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openEditCategorySheet(String name) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (_) => _EditCategorySheet(
+        initialName: name,
+        onRename: (oldName, newName) async {
+          await CategoryStore.rename(oldName, newName); // persist (Req 5)
+          if (!mounted) return;
+          setState(() => _custom = CategoryStore.custom); // refresh CUSTOM list (Req 3)
+          widget.onChanged(List.from(_custom));           // propagate, same as create
+        },
+        onDelete: (delName) async {
+          await CategoryStore.remove(delName);            // persist (Req 5)
+          if (!mounted) return;
+          setState(() => _custom = CategoryStore.custom); // refresh CUSTOM list (Req 4)
+          widget.onChanged(List.from(_custom));
+        },
+      ),
+    );
   }
 
 
@@ -1439,22 +1953,7 @@ class _CategoriesScreenState extends State<_CategoriesScreen> {
                         style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                       ),
                       const SizedBox(height: 24),   // ← NEW: increased gap
-                      if (_custom.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          'THERE ARE NO CUSTOM CATEGORIES',
-                          style: TextStyle(color: Colors.white38, fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.3),
-                        ),
-                      )
-                    else
-                      ..._custom.map((c) => Padding(
-                        padding: const EdgeInsets.only(bottom: 18),
-                        child: Text(
-                          c,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-                        ),
-                      )),
+                      _buildCustomSection(),
                     const SizedBox(height: 8),
                     // ── REPLACE WITH ──
                     const Text(
