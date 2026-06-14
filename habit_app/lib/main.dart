@@ -6175,84 +6175,85 @@ class _ArchivedHabitsScreenState extends State<_ArchivedHabitsScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: BoxDecoration(color: const Color(0xFF1C1C1C), borderRadius: BorderRadius.circular(16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // TOP ROW: name + ARCHIVED label + filled archive icon
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  h.title.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        h.title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      h.category.toUpperCase(),
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                h.category.toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.3),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          // FREQUENCY row
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  _formatFrequency(h).toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _formatFrequency(h).toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                      ),
+                    ),
+                    if (h.priority > 1) ...[
+                      const SizedBox(width: 8),
+                      Text('${h.priority}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.flag, color: Colors.white, size: 13),
+                    ],
+                  ],
                 ),
-              ),
-              if (h.priority > 1) ...[
-                const SizedBox(width: 8),
-                Text('${h.priority}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
-                const SizedBox(width: 2),
-                const Icon(Icons.flag, color: Colors.white, size: 13),
               ],
-            ],
+            ),
           ),
-          const SizedBox(height: 12),
-          Container(
-            height: 0.5,
-            color: Colors.white24,
-            margin: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 12),
-          // BOTTOM ROW: streak + progress + calendar + more
-          Row(
-            children: [
-              const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
-              const SizedBox(width: 4),
-              Text('${_calcStreak(h)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-              const SizedBox(width: 16),
-              const Icon(Icons.check, color: Colors.white, size: 16),
-              const SizedBox(width: 4),
-              Text('$pct%', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => HabitCalendarPage(habit: h, allHabits: widget.habits),
-                  ));
-                },
-                child: const Icon(Icons.calendar_today, color: Colors.white, size: 18),
-              ),
-              const SizedBox(width: 20),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openArchivedCardSheet(context, h),
-                child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-              ),
-            ],
+          Container(height: 0.5, color: Colors.white24, margin: const EdgeInsets.only(top: 12, bottom: 12)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
+                const SizedBox(width: 4),
+                Text('${_calcStreak(h)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 16),
+                const Icon(Icons.check, color: Colors.white, size: 16),
+                const SizedBox(width: 4),
+                Text('$pct%', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                const Spacer(),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => HabitCalendarPage(habit: h, allHabits: widget.habits),
+                    ));
+                  },
+                  child: const Icon(Icons.calendar_today, color: Colors.white, size: 18),
+                ),
+                const SizedBox(width: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _openArchivedCardSheet(context, h),
+                  child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+                ),
+              ],
+            ),
           ),
         ],
       ),
