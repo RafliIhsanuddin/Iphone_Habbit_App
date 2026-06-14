@@ -101,6 +101,8 @@ class Habit {
   List<ReminderEntry> reminders;
   DateTime startDate;
   DateTime? endDate;
+  bool isArchived;
+  DateTime? archivedAt;
   final Map<String, HabitState> dailyState = {};
   final Map<String, String> dailyNote = {};
   Map<String,bool> freqWeekDays;
@@ -111,7 +113,7 @@ class Habit {
   int freqRepeatEvery;
   bool freqFlexible;
 
-  Habit({required this.id, required this.title, this.category = '', this.description = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.frequency = 'EVERY DAY', Map<String,bool>? freqWeekDays, Set<int>? freqMonthDays, List<DateTime>? freqYearDays, this.freqPeriodDays = 1, this.freqPeriodUnit = 'WEEK', this.freqRepeatEvery = 1, this.freqFlexible = false})
+  Habit({required this.id, required this.title, this.category = '', this.description = '', this.priority = 1, List<ReminderEntry>? reminders, required this.startDate, this.endDate, this.isArchived = false, this.archivedAt, this.frequency = 'EVERY DAY', Map<String,bool>? freqWeekDays, Set<int>? freqMonthDays, List<DateTime>? freqYearDays, this.freqPeriodDays = 1, this.freqPeriodUnit = 'WEEK', this.freqRepeatEvery = 1, this.freqFlexible = false})
       : reminders = reminders ?? [],
         freqWeekDays = freqWeekDays ?? {'MONDAY':false,'TUESDAY':false,'WEDNESDAY':false,'THURSDAY':false,'FRIDAY':false,'SATURDAY':false,'SUNDAY':false},
         freqMonthDays = freqMonthDays ?? {},
@@ -123,6 +125,12 @@ class Habit {
     final d = DateTime(day.year, day.month, day.day);
     if (d.isBefore(DateTime(startDate.year, startDate.month, startDate.day))) return false;
     if (endDate != null && d.isAfter(DateTime(endDate!.year, endDate!.month, endDate!.day))) return false;
+    // If archived: days strictly after archivedAt are not active.
+    // The day of archiving itself remains active (history is preserved).
+    if (isArchived && archivedAt != null) {
+      final archiveDay = DateTime(archivedAt!.year, archivedAt!.month, archivedAt!.day);
+      if (d.isAfter(archiveDay)) return false;
+    }
     return true;
   }
 
@@ -513,14 +521,22 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
   // Streak: consecutive days completed up to today
   int _calcStreak() {
     final now = DateTime.now();
-    DateTime cursor = DateTime(now.year, now.month, now.day);
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(widget.habit.startDate.year, widget.habit.startDate.month, widget.habit.startDate.day);
+
+    final List<DateTime> occurrences = [];
+    for (DateTime d = start; !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      if (_isScheduledOn(d)) occurrences.add(d);
+    }
+
     int streak = 0;
-    while (true) {
-      if (!widget.habit.isActiveOn(cursor)) break;
-      final s = widget.habit.stateOn(cursor);
-      if (s == HabitState.done) {
+    for (int i = occurrences.length - 1; i >= 0; i--) {
+      final state = widget.habit.stateOn(occurrences[i]);
+      if (state == HabitState.done) {
         streak++;
-        cursor = cursor.subtract(const Duration(days: 1));
+      } else if (state == HabitState.empty) {
+        if (streak == 0) continue;
+        break;
       } else {
         break;
       }
@@ -633,11 +649,12 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                 }
 
               } else {
-                // ── Today (scheduled) ──
-                hasOuterRing = true;
+                // ── Today (scheduled) — gray filled circle, black number ──
+                hasOuterRing = false;
                 if (isDone) {
-                  // DONE TODAY — white fill + outer ring, black number, white check above
-                  circleFill  = Colors.white;
+                  // DONE TODAY — gray fill, black number, white check above
+                  circleFill  = const Color(0xFFB8B8B8);
+                  circleBorder = null;
                   numColor    = Colors.black;
                   numWeight   = FontWeight.w900;
                   iconAbove   = CustomPaint(
@@ -645,21 +662,20 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                     painter: _CalCheckPainter(Colors.white),
                   );
                 } else if (isFail) {
-                  // FAIL TODAY — black fill + outer ring, white number, white cross above
-                  circleFill   = Colors.black;
-                  circleBorder = Border.all(color: Colors.white, width: 1.5);
-                  numColor     = Colors.white;
+                  // FAIL TODAY — gray fill, black number, white cross above
+                  circleFill   = const Color(0xFFB8B8B8);
+                  circleBorder = null;
+                  numColor     = Colors.black;
                   numWeight    = FontWeight.w900;
                   iconAbove    = CustomPaint(
                     size: const Size(10, 10),
                     painter: _CalCrossPainter(Colors.white),
                   );
                 } else {
-                  // PENDING TODAY — double-ring: outer white ring gap + inner outlined circle
-                  // No icon needed — the double ring clearly signals "today, not yet done"
-                  circleFill   = Colors.transparent;
-                  circleBorder = Border.all(color: Colors.white, width: 1.5);
-                  numColor     = Colors.white;
+                  // PENDING TODAY — gray fill, black number, no icon
+                  circleFill   = const Color(0xFFB8B8B8);
+                  circleBorder = null;
+                  numColor     = Colors.black;
                   numWeight    = FontWeight.w900;
                 }
               }
@@ -719,9 +735,33 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                 ),
               );
 
-              return SizedBox(
-                width: 46,
-                child: Center(child: cellContent),
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final now = DateTime.now();
+                  final today = DateTime(now.year, now.month, now.day);
+                  if (date.isAfter(today)) return;
+                  if (!isScheduled) return;
+                  setState(() {
+                    final cur = widget.habit.stateOn(date);
+                    if (cur == HabitState.skipped) {
+                      widget.habit.setStateOn(date, HabitState.empty);
+                    } else {
+                      widget.habit.setStateOn(
+                        date,
+                        cur == HabitState.empty
+                            ? HabitState.done
+                            : cur == HabitState.done
+                                ? HabitState.failed
+                                : HabitState.empty,
+                      );
+                    }
+                  });
+                },
+                child: SizedBox(
+                  width: 46,
+                  child: Center(child: cellContent),
+                ),
               );
             }),
           ),
@@ -1903,7 +1943,7 @@ class _NewCategorySheetState extends State<_NewCategorySheet> {
 
 Container(height: 0.5, color: Colors.white12),
 
-// CATEGORY NAME ROW
+// 8. Archive row — opens confirmation dialog
 GestureDetector(
   behavior: HitTestBehavior.opaque,
   onTap: _openCategoryNameDialog,
@@ -3314,14 +3354,34 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
-                          // Reset all progress-derived data. Streak and any
-                          // statistics are computed from dailyState, so clearing
-                          // it resets them to the empty state automatically.
+                          final now = DateTime.now();
+                          // Normalize to midnight so date-key lookups
+                          // (_key) and isActiveOn comparisons are exact.
+                          final today = DateTime(now.year, now.month, now.day);
+
                           setState(() {
-                            widget.habit.dailyState.clear();   // completion/progress/history
-                            widget.habit.startDate = DateTime.now(); // treat as created today
+                            // 1. Wipe ALL previous occurrence statuses and notes.
+                            widget.habit.dailyState.clear();
+                            widget.habit.dailyNote.clear();
+
+                            // 2. Move the habit's start date to today (midnight).
+                            widget.habit.startDate = today;
+
+                            // 3. Explicitly create today's occurrence as PENDING
+                            //    (HabitState.empty is the PENDING state throughout
+                            //    the app). This ensures streak = 0, progress = 0,
+                            //    and the calendar shows exactly one active day.
+                            widget.habit.setStateOn(today, HabitState.empty);
+
+                            // 4. Mirror the new start date into the local state
+                            //    field so the START DATE pill in the Edit rows
+                            //    re-renders immediately without a hot-reload.
+                            //    (widget.habit.startDate is read directly by
+                            //    _buildRow for START DATE, so setState alone
+                            //    is sufficient — no extra field needed.)
                           });
-                          Navigator.pop(context); // close confirm dialog; Edit page shows new values
+
+                          Navigator.pop(context); // close confirm dialog
                         },
                         child: Container(
                           width: double.infinity,
@@ -3703,17 +3763,28 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                     ),
                     _buildDivider(),
 
-                    // 11. ARCHIVE
+                    // 11. ARCHIVE / UNARCHIVE
                     GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () {},
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      onTap: () {
+                        setState(() {
+                          if (widget.habit.isArchived) {
+                            widget.habit.isArchived = false;
+                            widget.habit.archivedAt = null;
+                          } else {
+                            final now = DateTime.now();
+                            widget.habit.archivedAt = DateTime(now.year, now.month, now.day);
+                            widget.habit.isArchived = true;
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                         child: SizedBox(
                           width: double.infinity,
                           child: Text(
-                            'ARCHIVE HABIT',
-                            style: TextStyle(
+                            widget.habit.isArchived ? 'UNARCHIVE HABIT' : 'ARCHIVE HABIT',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
@@ -4039,16 +4110,17 @@ class _HabitBottomSheetState extends State<_HabitBottomSheet> {
             Expanded(child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(
-                    builder: (_) => HabitCalendarPage(
-                      habit: widget.habit,
-                      allHabits: widget.allHabits,
+                  Navigator.of(context, rootNavigator: true).push(
+                    MaterialPageRoute(
+                      builder: (_) => HabitCalendarPage(
+                        habit: widget.habit,
+                        allHabits: widget.allHabits,
+                      ),
                     ),
-                  ),
-                );
-              },
+                  ).then((_) {
+                    if (mounted) setState(() {});
+                  });
+                },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 20),
                 child: const Center(child: Text('CALENDAR', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
@@ -5479,10 +5551,88 @@ class _HabitsCardBottomSheetState extends State<_HabitsCardBottomSheet> {
           ),
           // 7. Full-width divider
           Container(height: 0.5, color: Colors.white24),
-          // 8. Archive row (visible, no functionality yet)
+          // 8. Archive row — confirmation dialog
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {},
+            onTap: () {
+              showDialog(
+                context: context,
+                barrierColor: Colors.black54,
+                builder: (dialogContext) => Dialog(
+                  backgroundColor: const Color(0xFF2C2C2C),
+                  insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                          child: Text(
+                            'Archive habit?',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                        Container(height: 0.5, color: Colors.white24),
+                        IntrinsicHeight(
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => Navigator.pop(dialogContext),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    child: const Center(
+                                      child: Text(
+                                        'CANCEL',
+                                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Container(width: 0.5, color: Colors.white24),
+                              Expanded(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () {
+                                    final now = DateTime.now();
+                                    widget.habit.archivedAt = DateTime(now.year, now.month, now.day);
+                                    widget.habit.isArchived = true;
+                                    Navigator.pop(dialogContext); // close dialog
+                                    Navigator.pop(context);       // close bottom sheet
+                                    widget.onEdited();
+                                  },
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(vertical: 18),
+                                    child: const Center(
+                                      child: Text(
+                                        'ARCHIVE',
+                                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -5522,6 +5672,648 @@ class _HabitsCardBottomSheetState extends State<_HabitsCardBottomSheet> {
   }
 }
 
+// ─── Archived Card Bottom Sheet ──────────────────────────────────────────────
+
+class _ArchivedCardBottomSheet extends StatefulWidget {
+  final Habit habit;
+  final List<Habit> allHabits;
+  final String Function(Habit) formatFrequency;
+  final VoidCallback onUnarchive;
+  final VoidCallback onDeleted;
+  final VoidCallback onEdited;
+
+  const _ArchivedCardBottomSheet({
+    required this.habit,
+    required this.allHabits,
+    required this.formatFrequency,
+    required this.onUnarchive,
+    required this.onDeleted,
+    required this.onEdited,
+  });
+
+  @override
+  State<_ArchivedCardBottomSheet> createState() => _ArchivedCardBottomSheetState();
+}
+
+class _ArchivedCardBottomSheetState extends State<_ArchivedCardBottomSheet> {
+  void _navigateToEdit(BuildContext context) {
+    Navigator.pop(context);
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => EditHabitScreen(
+          habit: widget.habit,
+          allHabits: widget.allHabits,
+          onDelete: () {
+            widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+            widget.onDeleted();
+          },
+        ),
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+      widget.onEdited();
+    });
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Text(
+                  'DO YOU WANT TO DELETE THIS HABIT?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text('CANCEL', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 0.5, color: Colors.white24),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+                          Navigator.pop(context);
+                          Navigator.pop(context);
+                          widget.onDeleted();
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text('CONFIRM', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final freq = widget.formatFrequency(widget.habit).toUpperCase();
+    final desc = widget.habit.description.trim();
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 2),
+            child: Text(
+              widget.habit.title.toUpperCase(),
+              style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 2),
+            child: Text(
+              freq,
+              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+            ),
+          ),
+          if (desc.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+              child: Text(
+                desc.toUpperCase(),
+                style: const TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+              ),
+            ),
+          const SizedBox(height: 12),
+          Container(height: 0.5, color: Colors.white24),
+          // Calendar row
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute(
+                  builder: (_) => HabitCalendarPage(
+                    habit: widget.habit,
+                    allHabits: widget.allHabits,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: const Text(
+                'CALENDAR',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+              ),
+            ),
+          ),
+          // Edit row
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _navigateToEdit(context),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: const Text(
+                'EDIT',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+              ),
+            ),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          // Unarchive row
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              Navigator.pop(context);
+              widget.onUnarchive();
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: const Text(
+                'UNARCHIVE',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+              ),
+            ),
+          ),
+          // Delete row
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _confirmDelete(context),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+              child: const Text(
+                'DELETE',
+                style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+              ),
+            ),
+          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Archived Habits Screen ───────────────────────────────────────────────────
+
+class _ArchivedHabitsScreen extends StatefulWidget {
+  final List<Habit> habits;
+  final VoidCallback onUnarchive;
+  const _ArchivedHabitsScreen({required this.habits, required this.onUnarchive});
+  @override State<_ArchivedHabitsScreen> createState() => _ArchivedHabitsScreenState();
+}
+
+class _ArchivedHabitsScreenState extends State<_ArchivedHabitsScreen> {
+  List<Habit> get _archived => widget.habits.where((h) => h.isArchived).toList();
+
+  static const _weekDayAbbr = {
+    'MONDAY': 'MON', 'TUESDAY': 'TUE', 'WEDNESDAY': 'WED', 'THURSDAY': 'THU',
+    'FRIDAY': 'FRI', 'SATURDAY': 'SAT', 'SUNDAY': 'SUN',
+  };
+
+  String _formatFrequency(Habit h) {
+    final freq = h.frequency;
+    if (freq == 'EVERY DAY' || freq.isEmpty) return 'EVERY DAY';
+    if (freq == 'REPEAT') return 'every ${h.freqRepeatEvery} days';
+    if (freq == 'SOME DAYS PER PERIOD') return '${h.freqPeriodDays} days per ${h.freqPeriodUnit.toLowerCase()}';
+    if (freq == 'SPECIFIC DAYS OF THE WEEK') {
+      const ordered = ['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
+      final selected = ordered.where((d) => h.freqWeekDays[d] == true).toList();
+      if (selected.length == 7) return 'EVERY DAY';
+      if (selected.isEmpty) return 'SPECIFIC DAYS OF THE WEEK';
+      return selected.map((d) => _weekDayAbbr[d]!).join(' - ');
+    }
+    if (freq == 'SPECIFIC DAYS OF THE MONTH') {
+      if (h.freqMonthDays.isEmpty) return 'SPECIFIC DAYS OF THE MONTH';
+      final sorted = h.freqMonthDays.toList()..sort((a, b) { if (a==0) return 1; if (b==0) return -1; return a.compareTo(b); });
+      return 'DAYS OF MONTH : ${sorted.map((d) => d == 0 ? 'LAST DAY' : '$d').join(', ')}';
+    }
+    if (freq == 'SPECIFIC DAYS OF THE YEAR') return 'SPECIFIC DAYS OF THE YEAR';
+    return freq.toUpperCase();
+  }
+
+  bool _isScheduledOn(Habit h, DateTime day) => _habitIsScheduledOn(h, day);
+
+  List<DateTime> get _week {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return List.generate(7, (i) => today.subtract(Duration(days: 6 - i)));
+  }
+
+  List<String> get _dayLabels {
+    const abbr = {1:'MON',2:'TUE',3:'WED',4:'THU',5:'FRI',6:'SAT',7:'SUN'};
+    return _week.map((d) => abbr[d.weekday]!).toList();
+  }
+
+  int _progressPercent(Habit h) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DateTime start = DateTime(h.startDate.year, h.startDate.month, h.startDate.day);
+    // For archived habits use archivedAt as the end of the measurement window
+    DateTime end = h.archivedAt != null
+        ? DateTime(h.archivedAt!.year, h.archivedAt!.month, h.archivedAt!.day)
+        : today;
+    if (h.endDate != null) {
+      final e = DateTime(h.endDate!.year, h.endDate!.month, h.endDate!.day);
+      if (e.isBefore(end)) end = e;
+    }
+    if (start.isAfter(end)) return 0;
+    final List<DateTime> occurrences = [];
+    for (DateTime d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      if (_isScheduledOn(h, d)) occurrences.add(d);
+    }
+    if (occurrences.isEmpty) return 0;
+    int done = 0;
+    for (final d in occurrences) { if (h.stateOn(d) == HabitState.done) done++; }
+    return (done / occurrences.length * 100).round();
+  }
+
+  int _calcStreak(Habit h) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(h.startDate.year, h.startDate.month, h.startDate.day);
+    final List<DateTime> occurrences = [];
+    for (DateTime d = start; !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      if (_isScheduledOn(h, d)) occurrences.add(d);
+    }
+    int streak = 0;
+    for (int i = occurrences.length - 1; i >= 0; i--) {
+      final state = h.stateOn(occurrences[i]);
+      if (state == HabitState.done) { streak++; }
+      else if (state == HabitState.empty) { if (streak == 0) continue; break; }
+      else { break; }
+    }
+    return streak;
+  }
+
+  void _confirmUnarchive(BuildContext context, Habit h) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: const Color(0xFF2C2C2C),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                child: Text(
+                  'Do you want to select a new end date?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                ),
+              ),
+              Container(height: 0.5, color: Colors.white24),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.pop(dialogContext);
+                          _doUnarchive(h, null);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text('NO', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 0.5, color: Colors.white24),
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () async {
+                          Navigator.pop(dialogContext);
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100),
+                            builder: (c, ch) => Theme(
+                              data: ThemeData.dark().copyWith(
+                                colorScheme: const ColorScheme.dark(
+                                  primary: Colors.white,
+                                  onPrimary: Colors.black,
+                                  surface: Color(0xFF2C2C2C),
+                                  onSurface: Colors.white,
+                                ),
+                              ),
+                              child: ch!,
+                            ),
+                          );
+                          _doUnarchive(h, picked);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: const Center(
+                            child: Text('YES', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _doUnarchive(Habit h, DateTime? newEndDate) {
+    setState(() {
+      h.isArchived = false;
+      h.archivedAt = null;
+      if (newEndDate != null) {
+        h.endDate = newEndDate;
+      }
+    });
+    widget.onUnarchive();
+  }
+
+  void _openArchivedCardSheet(BuildContext context, Habit h) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (_) => _ArchivedCardBottomSheet(
+        habit: h,
+        allHabits: widget.habits,
+        formatFrequency: _formatFrequency,
+        onUnarchive: () {
+          _confirmUnarchive(context, h);
+        },
+        onDeleted: () {
+          setState(() {
+            widget.habits.removeWhere((x) => x.id == h.id);
+          });
+          widget.onUnarchive();
+        },
+        onEdited: () {
+          if (mounted) setState(() {});
+        },
+      ),
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Widget _historyCell(Habit h, DateTime day, DateTime today, String label) {
+    final scheduled = _isScheduledOn(h, day);
+    final state = h.stateOn(day);
+    final isToday = day.year == today.year && day.month == today.month && day.day == today.day;
+    final isFuture = day.isAfter(today);
+    final isDone = state == HabitState.done;
+    final isFail = state == HabitState.failed;
+
+    Widget? iconAbove;
+    Color circleFill = Colors.transparent;
+    Border? circleBorder;
+    Color numColor = Colors.white;
+    FontWeight numWeight = FontWeight.w400;
+
+    if (!scheduled) {
+      numColor = isFuture ? Colors.white24 : Colors.white30;
+    } else if (!isToday) {
+      if (isDone) {
+        circleFill = Colors.white; numColor = Colors.black; numWeight = FontWeight.w800;
+        iconAbove = CustomPaint(size: const Size(13, 11), painter: _CalCheckPainter(Colors.white));
+      } else if (isFail) {
+        circleFill = Colors.black; circleBorder = Border.all(color: Colors.white, width: 1.5);
+        numColor = Colors.white; numWeight = FontWeight.w800;
+        iconAbove = CustomPaint(size: const Size(12, 12), painter: _CalCrossPainter(Colors.white));
+      } else {
+        circleFill = Colors.transparent; circleBorder = Border.all(color: Colors.white54, width: 1.5);
+        numColor = Colors.white70; numWeight = FontWeight.w500;
+      }
+    } else {
+      circleFill = const Color(0xFFB8B8B8); numColor = Colors.black; numWeight = FontWeight.w900;
+      if (isDone) iconAbove = CustomPaint(size: const Size(12, 10), painter: _CalCheckPainter(Colors.white));
+      else if (isFail) iconAbove = CustomPaint(size: const Size(10, 10), painter: _CalCrossPainter(Colors.white));
+    }
+
+    final Widget dateCircle = Container(
+      width: 32, height: 32,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: circleFill, border: circleBorder),
+      alignment: Alignment.center,
+      child: Text('${day.day}', style: TextStyle(color: numColor, fontSize: 13, fontWeight: numWeight, height: 1)),
+    );
+
+    return SizedBox(
+      width: 38,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(label, style: TextStyle(color: scheduled ? Colors.white54 : Colors.white24, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+        const SizedBox(height: 4),
+        SizedBox(height: 14, child: Center(child: iconAbove ?? const SizedBox.shrink())),
+        const SizedBox(height: 2),
+        dateCircle,
+      ]),
+    );
+  }
+
+  Widget _card(Habit h) {
+    final pct = _progressPercent(h);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1C), borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // TOP ROW: name + ARCHIVED label + filled archive icon
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  h.title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                h.category.toUpperCase(),
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 0.3),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          // FREQUENCY row
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  _formatFrequency(h).toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3),
+                ),
+              ),
+              if (h.priority > 1) ...[
+                const SizedBox(width: 8),
+                Text('${h.priority}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 2),
+                const Icon(Icons.flag, color: Colors.white, size: 13),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 0.5,
+            color: Colors.white24,
+            margin: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 12),
+          // BOTTOM ROW: streak + progress + calendar + more
+          Row(
+            children: [
+              const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              Text('${_calcStreak(h)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 16),
+              const Icon(Icons.check, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              Text('$pct%', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+              const Spacer(),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => HabitCalendarPage(habit: h, allHabits: widget.habits),
+                  ));
+                },
+                child: const Icon(Icons.calendar_today, color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 20),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openArchivedCardSheet(context, h),
+                child: const Icon(Icons.more_vert, color: Colors.white, size: 20),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final archived = _archived;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // HEADER: [☰] ARCHIVED  [filled archive icon]
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 12),
+                      child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    ),
+                  ),
+                  const Text('ARCHIVED', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  const Spacer(),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.archive, color: Colors.white, size: 24),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: archived.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'There are no archived habits',
+                        style: TextStyle(color: Colors.white30, fontSize: 15, fontWeight: FontWeight.w500),
+                      ),
+                    )
+                  : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    itemCount: archived.length,
+                    itemBuilder: (ctx, i) => _card(archived[i]),
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 // ─── Habits Overview Screen ───────────────────────────────────────────────────
 
 class HabitsScreen extends StatefulWidget {
@@ -5534,7 +6326,13 @@ class _HabitsScreenState extends State<HabitsScreen> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Day labels for the week row (Sunday-first, matching the design).
-  static const _dayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  // Day labels derived from the actual days shown (always ends with today).
+  static const _allDayLabels = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  List<String> get _dayLabels {
+    // weekday: Mon=1 … Sun=7; map to abbreviation.
+    const abbr = {1:'MON',2:'TUE',3:'WED',4:'THU',5:'FRI',6:'SAT',7:'SUN'};
+    return _week.map((d) => abbr[d.weekday]!).toList();
+  }
 
   // Identical wording/logic to EditHabitScreen._formatFrequency (reused, not re-invented).
   static const _weekDayAbbr = {
@@ -5578,8 +6376,8 @@ class _HabitsScreenState extends State<HabitsScreen> {
   List<DateTime> get _week {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final sunday = today.subtract(Duration(days: today.weekday % 7));
-    return List.generate(7, (i) => sunday.add(Duration(days: i)));
+    // Today is always the rightmost (index 6); each earlier box is the previous day.
+    return List.generate(7, (i) => today.subtract(Duration(days: 6 - i)));
   }
 
   int _progressPercent(Habit h) {
@@ -5592,15 +6390,72 @@ class _HabitsScreenState extends State<HabitsScreen> {
       if (e.isBefore(end)) end = e;
     }
     if (start.isAfter(end)) return 0;
-    int scheduled = 0, done = 0;
+
+    // Collect only valid scheduled occurrences up to and including today,
+    // using the exact same occurrence engine as streak and calendar rendering.
+    final List<DateTime> occurrences = [];
     for (DateTime d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
-      if (_isScheduledOn(h, d)) {
-        scheduled++;
-        if (h.stateOn(d) == HabitState.done) done++;
-      }
+      if (_isScheduledOn(h, d)) occurrences.add(d);
     }
+    if (occurrences.isEmpty) return 0;
+
+    // Determine whether today itself is a scheduled occurrence and is still pending.
+    // Only today's occurrence is "active" — past occurrences are always finalized,
+    // regardless of whether the user marked them or not.
+    final DateTime latestOccurrence = occurrences.last;
+    final bool latestIsToday = latestOccurrence.year == today.year &&
+        latestOccurrence.month == today.month &&
+        latestOccurrence.day == today.day;
+    final bool latestIsPending = latestIsToday &&
+        h.stateOn(latestOccurrence) == HabitState.empty;
+
+    int scheduled = occurrences.length;
+    int done = 0;
+    for (final d in occurrences) {
+      if (h.stateOn(d) == HabitState.done) done++;
+    }
+
+    // Only exclude today's occurrence from the denominator when it is still
+    // pending (empty). A FAIL on today counts normally (reduces progress).
+    // Past occurrences that are empty count as incomplete and stay in the
+    // denominator — they are finalized missed days, not active occurrences.
+    if (latestIsPending) {
+      scheduled -= 1;
+    }
+
     if (scheduled == 0) return 0;
     return (done / scheduled * 100).round();
+  }
+
+  
+
+  int _calcStreak(Habit h) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = DateTime(h.startDate.year, h.startDate.month, h.startDate.day);
+
+    // Collect all scheduled occurrences up to today, descending
+    final List<DateTime> occurrences = [];
+    for (DateTime d = start; !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      if (_isScheduledOn(h, d)) occurrences.add(d);
+    }
+
+    // Walk backwards; skip the latest if it's pending
+    int streak = 0;
+    for (int i = occurrences.length - 1; i >= 0; i--) {
+      final state = h.stateOn(occurrences[i]);
+      if (state == HabitState.done) {
+        streak++;
+      } else if (state == HabitState.empty) {
+        // Pending: skip only the very first (most recent) occurrence
+        if (streak == 0) continue;
+        break;
+      } else {
+        // failed or skipped: break immediately
+        break;
+      }
+    }
+    return streak;
   }
 
 
@@ -5646,7 +6501,9 @@ class _HabitsScreenState extends State<HabitsScreen> {
     ).then((_) { if (mounted) setState(() {}); });
   }
 
-  // SECTION 3: one circular date indicator.
+  
+
+  // SECTION 3: one circular date indicator — exact same 6-state system as Calendar page.
   Widget _historyCell(Habit h, DateTime day, DateTime today, String label) {
     final scheduled = _isScheduledOn(h, day);
     final state = h.stateOn(day);
@@ -5655,55 +6512,163 @@ class _HabitsScreenState extends State<HabitsScreen> {
     final isDone = state == HabitState.done;
     final isFail = state == HabitState.failed;
 
-    // Check / cross mark above the number (Done / Fail).
-    Widget mark = const SizedBox(height: 14);
-    if (scheduled && (isDone || isFail)) {
-      mark = SizedBox(
-        height: 14,
-        child: Icon(isDone ? Icons.check : Icons.close, color: Colors.white, size: 14),
-      );
-    }
+    // ── Exact same variables as _buildCalendarGrid in HabitCalendarPage ──
+    Widget? iconAbove;
+    Color   circleFill   = Colors.transparent;
+    Border? circleBorder;
+    bool    hasOuterRing = false;
+    Color   numColor     = Colors.white;
+    FontWeight numWeight = FontWeight.w400;
 
-    Color? circleColor;
-    Color numberColor = Colors.white;
-    FontWeight weight = FontWeight.w500;
     if (!scheduled) {
-      // STATE D: excluded / not applicable → dimmed.
-      numberColor = Colors.white24;
-    } else if (isToday) {
-      // STATE E: grey circle, black number.
-      circleColor = const Color(0xFF9E9E9E);
-      numberColor = Colors.black;
-      weight = FontWeight.w700;
-    } else if (!isDone && !isFail && !isFuture) {
-      // STATE A: pending past day → dark circle, white number.
-      circleColor = const Color(0xFF2C2C2C);
-      weight = FontWeight.w700;
+      numColor  = isFuture ? Colors.white24 : Colors.white30;
+      numWeight = FontWeight.w400;
+    } else if (!isToday) {
+      if (isDone) {
+        circleFill  = Colors.white;
+        numColor    = Colors.black;
+        numWeight   = FontWeight.w800;
+        iconAbove   = CustomPaint(
+          size: const Size(13, 11),
+          painter: _CalCheckPainter(Colors.white),
+        );
+      } else if (isFail) {
+        circleFill   = Colors.black;
+        circleBorder = Border.all(color: Colors.white, width: 1.5);
+        numColor     = Colors.white;
+        numWeight    = FontWeight.w800;
+        iconAbove    = CustomPaint(
+          size: const Size(12, 12),
+          painter: _CalCrossPainter(Colors.white),
+        );
+      } else {
+        circleFill   = Colors.transparent;
+        circleBorder = Border.all(color: Colors.white54, width: 1.5);
+        numColor     = Colors.white70;
+        numWeight    = FontWeight.w500;
+      }
+    } else {
+      // ── Today (scheduled) — gray filled circle, black number ──
+      hasOuterRing = false;
+      if (isDone) {
+        // DONE TODAY — gray fill, black number, white check above
+        circleFill  = const Color(0xFFB8B8B8);
+        circleBorder = null;
+        numColor    = Colors.black;
+        numWeight   = FontWeight.w900;
+        iconAbove   = CustomPaint(
+          size: const Size(12, 10),
+          painter: _CalCheckPainter(Colors.white),
+        );
+      } else if (isFail) {
+        // FAIL TODAY — gray fill, black number, white cross above
+        circleFill   = const Color(0xFFB8B8B8);
+        circleBorder = null;
+        numColor     = Colors.black;
+        numWeight    = FontWeight.w900;
+        iconAbove    = CustomPaint(
+          size: const Size(10, 10),
+          painter: _CalCrossPainter(Colors.white),
+        );
+      } else {
+        // PENDING TODAY — gray fill, black number, no icon
+        circleFill   = const Color(0xFFB8B8B8);
+        circleBorder = null;
+        numColor     = Colors.black;
+        numWeight    = FontWeight.w900;
+      }
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: scheduled ? Colors.white54 : Colors.white24,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
+    // ── Build the 32×32 date circle (slightly smaller than calendar's 40×40
+    //    to fit the card's compact row) ──
+    final Widget dateCircle = Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: circleFill,
+        border: circleBorder,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          color: numColor,
+          fontSize: 13,
+          fontWeight: numWeight,
+          height: 1,
+        ),
+      ),
+    );
+
+    // ── Wrap with outer ring for today states ──
+    final Widget dateWidget = hasOuterRing
+        ? Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.45),
+                width: 2,
+              ),
+            ),
+            child: Center(child: dateCircle),
+          )
+        : dateCircle;
+
+    // ── Assemble: day-label + icon strip + circle ──
+    final cell = SizedBox(
+      width: 38,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: scheduled ? Colors.white54 : Colors.white24,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        mark,
-        const SizedBox(height: 2),
-        Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          decoration: circleColor == null ? null : BoxDecoration(shape: BoxShape.circle, color: circleColor),
-          child: Text('${day.day}', style: TextStyle(color: numberColor, fontSize: 15, fontWeight: weight)),
-        ),
-      ],
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 14,
+            child: Center(
+              child: iconAbove ?? const SizedBox.shrink(),
+            ),
+          ),
+          const SizedBox(height: 2),
+          dateWidget,
+        ],
+      ),
+    );
+
+    final now2 = DateTime.now();
+    final today2 = DateTime(now2.year, now2.month, now2.day);
+    if (!scheduled || day.isAfter(today2)) return cell;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        setState(() {
+          final cur = h.stateOn(day);
+          if (cur == HabitState.skipped) {
+            h.setStateOn(day, HabitState.empty);
+          } else {
+            h.setStateOn(
+              day,
+              cur == HabitState.empty
+                  ? HabitState.done
+                  : cur == HabitState.done
+                      ? HabitState.failed
+                      : HabitState.empty,
+            );
+          }
+        });
+      },
+      child: cell,
     );
   }
 
@@ -5720,6 +6685,7 @@ class _HabitsScreenState extends State<HabitsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+           // SECTION 1: TOP ROW — name (left) + category + archive icon (right)
           // SECTION 1: TOP ROW — name (left) + category (right)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -5769,6 +6735,10 @@ class _HabitsScreenState extends State<HabitsScreen> {
           // SECTION 4: BOTTOM ROW — % (far left) · calendar · three dots (far right)
           Row(
             children: [
+              const Icon(Icons.local_fire_department, color: Colors.white, size: 16),
+              const SizedBox(width: 4),
+              Text('${_calcStreak(h)}', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 16),
               const Icon(Icons.check, color: Colors.white, size: 16),
               const SizedBox(width: 4),
               Text('$pct%', style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
@@ -5859,7 +6829,7 @@ class _HabitsScreenState extends State<HabitsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // SCREEN HEADER: [☰] HABITS
+            // SCREEN HEADER: [☰] HABITS  [archive icon]
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
               child: Row(
@@ -5873,20 +6843,45 @@ class _HabitsScreenState extends State<HabitsScreen> {
                     ),
                   ),
                   const Text('HABITS', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                  const Spacer(),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => _ArchivedHabitsScreen(
+                            habits: widget.habits,
+                            onUnarchive: () {
+                              if (mounted) setState(() {});
+                            },
+                          ),
+                        ),
+                      ).then((_) {
+                        if (mounted) setState(() {});
+                      });
+                    },
+                    child: const Icon(Icons.archive_outlined, color: Colors.white, size: 24),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
             // HABIT LIST — cards keep a consistent size; ~4 fit, more scroll vertically.
             Expanded(
-              child: widget.habits.isEmpty
+              child: widget.habits.where((h) => !h.isArchived).isEmpty
                   ? const Center(
-                      child: Text('NO HABITS YET', style: TextStyle(color: Colors.white24, fontSize: 12, letterSpacing: 3, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        'There are no habits',
+                        style: TextStyle(color: Colors.white30, fontSize: 15, fontWeight: FontWeight.w500),
+                      ),
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      itemCount: widget.habits.length,
-                      itemBuilder: (ctx, i) => _card(widget.habits[i]),
+                      itemCount: widget.habits.where((h) => !h.isArchived).length,
+                      itemBuilder: (ctx, i) {
+                        final active = widget.habits.where((h) => !h.isArchived).toList();
+                        return _card(active[i]);
+                      },
                     ),
             ),
           ],
