@@ -5161,6 +5161,7 @@ class StartDateModal extends StatelessWidget {
   const StartDateModal({super.key,required this.selectedDate});
   String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
   Future<void> _nav(BuildContext ctx,DateTime sd)async{
+    Navigator.pop(ctx);
     final res=await Navigator.push<dynamic>(ctx,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String())));
     if(res!=null&&ctx.mounted){
       if(res is HabitScheduleResult)Navigator.pop(ctx,res);
