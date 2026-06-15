@@ -5160,12 +5160,22 @@ class StartDateModal extends StatelessWidget {
   final DateTime selectedDate;
   const StartDateModal({super.key,required this.selectedDate});
   String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
+  // REPLACE WITH
   Future<void> _nav(BuildContext ctx,DateTime sd)async{
-    Navigator.pop(ctx);
-    final res=await Navigator.push<dynamic>(ctx,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String())));
-    if(res!=null&&ctx.mounted){
-      if(res is HabitScheduleResult)Navigator.pop(ctx,res);
-      else if(res is String)Navigator.pop(ctx,HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[]));
+    final nav=Navigator.of(ctx);
+    nav.pop();
+    final res=await nav.push<dynamic>(
+      MaterialPageRoute(
+        builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String()),
+      ),
+    );
+    if(!ctx.mounted)return;
+    if(res!=null){
+      nav.pop(res is HabitScheduleResult
+          ? res
+          : res is String
+              ? HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[])
+              : null);
     }
   }
   @override
@@ -5174,6 +5184,24 @@ class StartDateModal extends StatelessWidget {
       Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:const Center(child:Text('START DATE',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w700,letterSpacing:0.5)))),
       GestureDetector(onTap:()=>_nav(context,selectedDate),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:Center(child:Text(_fmt(selectedDate),style:const TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
       GestureDetector(onTap:()=>_nav(context,DateTime.now()),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:const Center(child:Text('TODAY',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
+      GestureDetector(onTap:()=>Navigator.pop(context,null),behavior:HitTestBehavior.opaque,child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),child:const Center(child:Text('CLOSE',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
+    ])));
+  }
+}
+
+
+// ─── Start Date Picker Modal (returns DateTime, no internal navigation) ────────
+
+class _StartDatePickerModal extends StatelessWidget {
+  final DateTime selectedDate;
+  const _StartDatePickerModal({required this.selectedDate});
+  String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
+  @override
+  Widget build(BuildContext context){
+    return Dialog(backgroundColor:Colors.transparent,insetPadding:const EdgeInsets.symmetric(horizontal:32),child:Container(decoration:BoxDecoration(color:const Color(0xFF2C2C2C),borderRadius:BorderRadius.circular(16)),child:Column(mainAxisSize:MainAxisSize.min,children:[
+      Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:const Center(child:Text('START DATE',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w700,letterSpacing:0.5)))),
+      GestureDetector(onTap:()=>Navigator.pop(context,selectedDate),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:Center(child:Text(_fmt(selectedDate),style:const TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
+      GestureDetector(onTap:()=>Navigator.pop(context,DateTime.now()),child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.black,width:1))),child:const Center(child:Text('TODAY',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
       GestureDetector(onTap:()=>Navigator.pop(context,null),behavior:HitTestBehavior.opaque,child:Container(width:double.infinity,padding:const EdgeInsets.symmetric(vertical:18),child:const Center(child:Text('CLOSE',style:TextStyle(color:Colors.white,fontSize:17,fontWeight:FontWeight.w600,letterSpacing:0.3))))),
     ])));
   }
@@ -7041,7 +7069,9 @@ class _HabitHomePageState extends State<HabitHomePage> {
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:now.toIso8601String())));
       if(res!=null&&mounted)_addFromResult(res);
     }else{
-      final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
+      final DateTime? chosenDate=await showDialog<DateTime>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>_StartDatePickerModal(selectedDate:_sel));
+      if(chosenDate==null||!mounted)return;
+      final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:chosenDate.toIso8601String())));
       if(res!=null&&mounted)_addFromResult(res);
     }
   }
