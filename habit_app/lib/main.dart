@@ -5171,20 +5171,10 @@ class StartDateModal extends StatelessWidget {
   String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
   // REPLACE WITH
   Future<void> _nav(BuildContext ctx,DateTime sd)async{
-    final nav=Navigator.of(ctx);
-    nav.pop();
-    final res=await nav.push<dynamic>(
-      MaterialPageRoute(
-        builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String()),
-      ),
-    );
-    if(!ctx.mounted)return;
-    if(res!=null){
-      nav.pop(res is HabitScheduleResult
-          ? res
-          : res is String
-              ? HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[])
-              : null);
+    final res=await Navigator.push<dynamic>(ctx,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String())));
+    if(res!=null&&ctx.mounted){
+      if(res is HabitScheduleResult)Navigator.pop(ctx,res);
+      else if(res is String)Navigator.pop(ctx,HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[]));
     }
   }
   @override
@@ -7078,9 +7068,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:now.toIso8601String())));
       if(res!=null&&mounted)_addFromResult(res);
     }else{
-      final DateTime? chosenDate=await showDialog<DateTime>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>_StartDatePickerModal(selectedDate:_sel));
-      if(chosenDate==null||!mounted)return;
-      final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:chosenDate.toIso8601String())));
+      final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
       if(res!=null&&mounted)_addFromResult(res);
     }
   }
