@@ -4956,11 +4956,11 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
   late DateTime _start;bool _startIsToday=true,_endEnabled=false;DateTime? _end;
   final TextEditingController _dCtrl=TextEditingController(text:'60');
   final List<ReminderEntry> _reminders=[];int _priority=1;
-  @override void initState(){super.initState();final p=DateTime.tryParse(widget.initialStartDate)??DateTime.now();_start=p;final n=DateTime.now();_startIsToday=p.year==n.year&&p.month==n.month&&p.day==n.day;_end=_start.add(const Duration(days:60));}
+  @override void initState(){super.initState();final p=DateTime.tryParse(widget.initialStartDate)??DateTime.now();_start=p;final n=DateTime.now();_startIsToday=p.year==n.year&&p.month==n.month&&p.day==n.day;_end=_start.add(const Duration(days:59));}
   @override void dispose(){_dCtrl.dispose();super.dispose();}
   String _fmt(DateTime d)=>'${d.month}/${d.day}/${d.year%100}';
   String _lbl()=>_startIsToday?'TODAY':_fmt(_start);
-  DateTime _compEnd(){final n=int.tryParse(_dCtrl.text)??60;return _start.add(Duration(days:n));}
+  DateTime _compEnd(){final parsed=int.tryParse(_dCtrl.text);final n=(parsed==null||parsed<=0)?1:parsed;return _start.add(Duration(days:n-1));}
   Widget _pill(String l)=>Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:6),decoration:BoxDecoration(color:const Color(0xFF2C2C2C),borderRadius:BorderRadius.circular(20)),child:Text(l,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700,letterSpacing:0.3)));
   Widget _row(String l, Widget r, {VoidCallback? onRowTap}) {
   final inner = Column(children:[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(l,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.3)),r]))]);
@@ -4982,7 +4982,7 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
       const SizedBox(height:28),
       _row('START DATE',GestureDetector(onTap:_pickS,child:_pill(_lbl())),onRowTap:_pickS),
       _row('END DATE',Switch(value:_endEnabled,onChanged:(v)=>setState((){_endEnabled=v;if(v)_end=_compEnd();}),activeColor:Colors.white,activeTrackColor:const Color(0xFF555555),inactiveThumbColor:Colors.white38,inactiveTrackColor:const Color(0xFF333333)),onRowTap:()=>setState((){_endEnabled=!_endEnabled;if(_endEnabled)_end=_compEnd();})),
-      if(_endEnabled)...[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[GestureDetector(onTap:_pickE,child:_pill(ed)),const SizedBox(width:16),SizedBox(width:80,child:TextField(controller:_dCtrl,keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.symmetric(vertical:2),border:InputBorder.none),onChanged:(v){if(v.trim().isEmpty){setState(()=>_end=DateTime.now());return;}final n=int.tryParse(v);if(n!=null&&n>0)setState(()=>_end=_start.add(Duration(days:n)));})),const SizedBox(width:16),const Text('DAYS',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5))]))],
+      if(_endEnabled)...[Container(height:0.5,color:Colors.white12),Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.center,children:[GestureDetector(onTap:_pickE,child:_pill(ed)),const SizedBox(width:16),SizedBox(width:80,child:TextField(controller:_dCtrl,keyboardType:TextInputType.number,textAlign:TextAlign.center,style:const TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,decoration:TextDecoration.underline,decorationColor:Colors.white),decoration:const InputDecoration(isDense:true,contentPadding:EdgeInsets.symmetric(vertical:2),border:InputBorder.none),onChanged:(v){final parsed=int.tryParse(v);final n=(parsed==null||parsed<=0)?1:parsed;setState(()=>_end=_start.add(Duration(days:n-1)));})),const SizedBox(width:16),const Text('DAYS',style:TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5))]))],
       _row('TIME AND REMINDERS',GestureDetector(onTap:_showR,child:Container(width:32,height:32,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:Center(child:Text('${_reminders.length}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700))))),onRowTap:_showR),
       _row('PRIORITY',GestureDetector(onTap:_showP,child:_pill(_priority==1?'DEFAULT':'${_priority}🏳')),onRowTap:_showP),
       const Spacer(),
@@ -4990,9 +4990,18 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
         GestureDetector(onTap:()=>Navigator.pop(context,null),child:const Text('BACK',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
         Row(children:[Container(width:8,height:8,decoration:const BoxDecoration(color:Colors.white,shape:BoxShape.circle)),const SizedBox(width:6),Container(width:8,height:8,decoration:const BoxDecoration(color:Colors.white,shape:BoxShape.circle)),const SizedBox(width:6),Container(width:8,height:8,decoration:BoxDecoration(color:Colors.white,shape:BoxShape.circle,border:Border.all(color:Colors.white38,width:1)))]),
         GestureDetector(onTap:(){
-          if(_endEnabled){final ee=_end??DateTime.now();final sd=DateTime(_start.year,_start.month,_start.day);final ed2=DateTime(ee.year,ee.month,ee.day);if(!ed2.isAfter(sd)){showDialog(context:context,builder:(_)=>AlertDialog(backgroundColor:const Color(0xFF2C2C2C),title:const Text('End date must be after start date',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('OK',style:TextStyle(color:Colors.white)))]));return;}}
-          Navigator.pop(context,HabitScheduleResult(title:widget.title,description:widget.description,category:widget.category,startDate:_start.toIso8601String(),frequency:widget.frequency,endDate:_endEnabled&&_end!=null?_end!.toIso8601String():'',priority:_priority,reminders:List.from(_reminders)));
-        },child:const Text('SAVE',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5))),
+  if(_endEnabled){
+    final sd=DateTime(_start.year,_start.month,_start.day);
+    final ee=_end??DateTime.now();
+    final ed2=DateTime(ee.year,ee.month,ee.day);
+    final minValidEnd=sd;
+    if(!ed2.isAfter(minValidEnd)){
+      showDialog(context:context,builder:(_)=>AlertDialog(backgroundColor:const Color(0xFF2C2C2C),title:const Text('END DATE MUST BE AFTER START DATE',style:TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),actions:[TextButton(onPressed:()=>Navigator.pop(context),child:const Text('OK',style:TextStyle(color:Colors.white)))]));
+      return;
+    }
+  }
+  Navigator.pop(context,HabitScheduleResult(title:widget.title,description:widget.description,category:widget.category,startDate:_start.toIso8601String(),frequency:widget.frequency,endDate:_endEnabled&&_end!=null?_end!.toIso8601String():'',priority:_priority,reminders:List.from(_reminders)));
+},child:const Text('SAVE',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w800,letterSpacing:0.5)))
       ]),
     ]))));
   }
