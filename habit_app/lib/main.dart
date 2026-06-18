@@ -7028,7 +7028,7 @@ class _HelpDialogState extends State<_HelpDialog>
               padding: EdgeInsets.symmetric(vertical: 18),
               child: Center(
                 child: Text(
-                  'HOW IT WORKS',
+                  'TO-DO LIST GESTURES',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -7053,79 +7053,89 @@ class _HelpDialogState extends State<_HelpDialog>
                     ),
                   ),
                   const Spacer(),
-                  SizedBox(
-                    width: 60,
-                    height: 40,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      alignment: Alignment.centerRight,
-                      children: [
-                        Positioned(
-                          right: 0,
-                          child: ScaleTransition(
-                            scale: _scaleAnim,
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              transitionBuilder: (child, anim) => ScaleTransition(
-                                scale: anim,
-                                child: FadeTransition(opacity: anim, child: child),
+                  Expanded(
+                    child: SizedBox(
+                      height: 40,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          // Status indicator — fixed on the right
+                          Positioned(
+                            right: 0,
+                            child: ScaleTransition(
+                              scale: _scaleAnim,
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 200),
+                                transitionBuilder: (child, anim) => ScaleTransition(
+                                  scale: anim,
+                                  child: FadeTransition(opacity: anim, child: child),
+                                ),
+                                child: _isDone
+                                    ? Container(
+                                        key: const ValueKey('done'),
+                                        width: 26,
+                                        height: 26,
+                                        decoration: const BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white,
+                                        ),
+                                        child: CustomPaint(painter: _BoldCheckPainter()),
+                                      )
+                                    : Container(
+                                        key: const ValueKey('empty'),
+                                        width: 26,
+                                        height: 26,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                          color: Colors.transparent,
+                                        ),
+                                      ),
                               ),
-                              child: _isDone
-                                  ? Container(
-                                      key: const ValueKey('done'),
-                                      width: 26,
-                                      height: 26,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.white,
-                                      ),
-                                      child: CustomPaint(painter: _BoldCheckPainter()),
-                                    )
-                                  : Container(
-                                      key: const ValueKey('empty'),
-                                      width: 26,
-                                      height: 26,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 2),
-                                        color: Colors.transparent,
-                                      ),
-                                    ),
                             ),
                           ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          child: AnimatedBuilder(
+                          // Ripple — centered on cursor tip position
+                          AnimatedBuilder(
                             animation: _rippleAnim,
                             builder: (_, __) {
                               final v = _rippleAnim.value;
-                              return Opacity(
-                                opacity: (1.0 - v).clamp(0.0, 1.0),
-                                child: Container(
-                                  width: 26 + 22 * v,
-                                  height: 26 + 22 * v,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.white, width: 1.5),
+                              final size = 18.0 + 28.0 * v;
+                              return Positioned(
+                                right: 120,
+                                top: (38 - size) / 2,
+                                child: Opacity(
+                                  opacity: (1.0 - v).clamp(0.0, 1.0),
+                                  child: Container(
+                                    width: size,
+                                    height: size,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                    ),
                                   ),
                                 ),
                               );
                             },
                           ),
-                        ),
-                        AnimatedBuilder(
-                          animation: _cursorAnim,
-                          builder: (_, __) {
-                            final rightOffset = 30.0 - (28.0 * _cursorAnim.value);
-                            return Positioned(
-                              right: rightOffset,
-                              bottom: -4,
-                              child: const _FingerCursor(),
-                            );
-                          },
-                        ),
-                      ],
+                          // Cursor — centered in gap between title and status
+                          Positioned(
+                            right: 135,
+                            top: 20,
+                            child: AnimatedBuilder(
+                              animation: _animCtrl,
+                              builder: (_, child) => Transform.scale(
+                                scale: _animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0,
+                                child: child,
+                              ),
+                              child: Transform.rotate(
+                                angle: -0.87,
+                                child: const _MouseCursor(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -7134,34 +7144,55 @@ class _HelpDialogState extends State<_HelpDialog>
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Text(
-                'THE DEMO SHOWS HOW TAPPING A HABIT ROW TOGGLES ITS STATE.',
+                'Click on any item in the to-do list to mark it as complete or to update its state.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
             Container(height: 0.5, color: Colors.white24),
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: const Center(
-                  child: Text(
-                    'CLOSE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+            IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: null,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'BACK',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  Container(width: 0.5, color: Colors.white24),
+                  Expanded(
+                    child: TextButton(
+                      onPressed: null,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          'NEXT',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -7176,74 +7207,55 @@ class _HelpDialogState extends State<_HelpDialog>
 
 
 
-/// A simple monochrome finger/pointer cursor drawn in pure white & black.
-class _FingerCursor extends StatelessWidget {
-  const _FingerCursor();
+/// Standard desktop arrow cursor — black arrow with white outline.
+class _MouseCursor extends StatelessWidget {
+  const _MouseCursor();
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(18, 22),
-      painter: _FingerCursorPainter(),
+      size: const Size(20, 18),
+      painter: _MouseCursorPainter(),
     );
   }
 }
 
-class _FingerCursorPainter extends CustomPainter {
+class _MouseCursorPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final fillPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    final strokePaint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    // Simple hand/pointer shape: a rounded rectangle body + pointing tip
-    final path = Path();
     final w = size.width;
     final h = size.height;
 
-    // Fingertip circle at top-center
-    final tipCx = w * 0.5;
-    final tipCy = h * 0.18;
-    final tipR = w * 0.22;
-    path.addOval(Rect.fromCircle(center: Offset(tipCx, tipCy), radius: tipR));
+    // Right-pointing filled arrow (send/tap icon style)
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(w, h * 0.5)
+      ..lineTo(0, h)
+      ..lineTo(w * 0.28, h * 0.5)
+      ..close();
 
-    // Palm body below
-    final bodyRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(w * 0.08, h * 0.32, w * 0.84, h * 0.60),
-      const Radius.circular(5),
+    // White outline
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
     );
-    path.addRRect(bodyRect);
 
-    canvas.drawPath(path, fillPaint);
-    canvas.drawPath(path, strokePaint);
-
-    // Small knuckle lines for realism
-    final knucklePaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.35)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawLine(
-      Offset(w * 0.30, h * 0.55),
-      Offset(w * 0.30, h * 0.78),
-      knucklePaint,
-    );
-    canvas.drawLine(
-      Offset(w * 0.70, h * 0.55),
-      Offset(w * 0.70, h * 0.78),
-      knucklePaint,
+    // White fill
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
     );
   }
 
   @override
-  bool shouldRepaint(_FingerCursorPainter o) => false;
+  bool shouldRepaint(_MouseCursorPainter o) => false;
 }
 
 
