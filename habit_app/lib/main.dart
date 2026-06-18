@@ -6920,6 +6920,333 @@ class _HabitsScreenState extends State<HabitsScreen> {
   }
 }
 
+
+
+
+// ─── Help / Tutorial Dialog ───────────────────────────────────────────────────
+
+class _HelpDialog extends StatefulWidget {
+  const _HelpDialog();
+  @override
+  State<_HelpDialog> createState() => _HelpDialogState();
+}
+
+class _HelpDialogState extends State<_HelpDialog>
+    with TickerProviderStateMixin {
+  bool _isDone = false;
+
+  late AnimationController _animCtrl;
+  late Animation<double> _scaleAnim;
+
+  late AnimationController _cursorCtrl;
+  late Animation<double> _cursorAnim;
+
+  late AnimationController _rippleCtrl;
+  late Animation<double> _rippleAnim;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 220),
+    );
+    _scaleAnim = Tween<double>(begin: 0.75, end: 1.0).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
+    );
+
+    _cursorCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _cursorAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _cursorCtrl, curve: Curves.easeInOut),
+    );
+
+    _rippleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _rippleAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut),
+    );
+
+    _runCycle();
+  }
+
+  Future<void> _runCycle() async {
+    while (mounted) {
+      // Step 1: pause at rest position
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+
+      // Step 2: finger moves toward checkbox
+      await _cursorCtrl.forward(from: 0).orCancel.catchError((_) {});
+      if (!mounted) return;
+
+      // Step 3: tap — ripple + toggle state + scale pop
+      _rippleCtrl.forward(from: 0);
+      setState(() => _isDone = !_isDone);
+      _animCtrl.forward(from: 0);
+
+      // Step 4: pause briefly while "tapped"
+      await Future.delayed(const Duration(milliseconds: 750));
+      if (!mounted) return;
+
+      // Step 5: finger retreats
+      await _cursorCtrl.reverse().orCancel.catchError((_) {});
+      if (!mounted) return;
+
+      // Step 6: pause before next tap
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    _cursorCtrl.dispose();
+    _rippleCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'HOW IT WORKS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              child: Row(
+                children: [
+                  const Text(
+                    'EXAMPLE HABIT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: 60,
+                    height: 40,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      alignment: Alignment.centerRight,
+                      children: [
+                        Positioned(
+                          right: 0,
+                          child: ScaleTransition(
+                            scale: _scaleAnim,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              transitionBuilder: (child, anim) => ScaleTransition(
+                                scale: anim,
+                                child: FadeTransition(opacity: anim, child: child),
+                              ),
+                              child: _isDone
+                                  ? Container(
+                                      key: const ValueKey('done'),
+                                      width: 26,
+                                      height: 26,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                      ),
+                                      child: CustomPaint(painter: _BoldCheckPainter()),
+                                    )
+                                  : Container(
+                                      key: const ValueKey('empty'),
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.white, width: 2),
+                                        color: Colors.transparent,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          child: AnimatedBuilder(
+                            animation: _rippleAnim,
+                            builder: (_, __) {
+                              final v = _rippleAnim.value;
+                              return Opacity(
+                                opacity: (1.0 - v).clamp(0.0, 1.0),
+                                child: Container(
+                                  width: 26 + 22 * v,
+                                  height: 26 + 22 * v,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: Colors.white, width: 1.5),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        AnimatedBuilder(
+                          animation: _cursorAnim,
+                          builder: (_, __) {
+                            final rightOffset = 30.0 - (28.0 * _cursorAnim.value);
+                            return Positioned(
+                              right: rightOffset,
+                              bottom: -4,
+                              child: const _FingerCursor(),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Text(
+                'THE DEMO SHOWS HOW TAPPING A HABIT ROW TOGGLES ITS STATE.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4,
+                ),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Center(
+                  child: Text(
+                    'CLOSE',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+/// A simple monochrome finger/pointer cursor drawn in pure white & black.
+class _FingerCursor extends StatelessWidget {
+  const _FingerCursor();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(18, 22),
+      painter: _FingerCursorPainter(),
+    );
+  }
+}
+
+class _FingerCursorPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fillPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    final strokePaint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    // Simple hand/pointer shape: a rounded rectangle body + pointing tip
+    final path = Path();
+    final w = size.width;
+    final h = size.height;
+
+    // Fingertip circle at top-center
+    final tipCx = w * 0.5;
+    final tipCy = h * 0.18;
+    final tipR = w * 0.22;
+    path.addOval(Rect.fromCircle(center: Offset(tipCx, tipCy), radius: tipR));
+
+    // Palm body below
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(w * 0.08, h * 0.32, w * 0.84, h * 0.60),
+      const Radius.circular(5),
+    );
+    path.addRRect(bodyRect);
+
+    canvas.drawPath(path, fillPaint);
+    canvas.drawPath(path, strokePaint);
+
+    // Small knuckle lines for realism
+    final knucklePaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.35)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawLine(
+      Offset(w * 0.30, h * 0.55),
+      Offset(w * 0.30, h * 0.78),
+      knucklePaint,
+    );
+    canvas.drawLine(
+      Offset(w * 0.70, h * 0.55),
+      Offset(w * 0.70, h * 0.78),
+      knucklePaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FingerCursorPainter o) => false;
+}
+
+
 // ─── Habit Home Page ──────────────────────────────────────────────────────────
 
 class HabitHomePage extends StatefulWidget {
@@ -7149,7 +7476,17 @@ class _HabitHomePageState extends State<HabitHomePage> {
               Text(_dateLabel,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.3)),
             ]),
           ])),
-          Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),const Icon(Icons.calendar_month,color:Colors.white,size:22),const SizedBox(width:18),const Text('?',style:TextStyle(color:Colors.white,fontSize:20,fontWeight:FontWeight.w300))]),
+          Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),const Icon(Icons.calendar_month,color:Colors.white,size:22),const SizedBox(width:18),GestureDetector(
+  behavior: HitTestBehavior.opaque,
+  onTap: () {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => const _HelpDialog(),
+    );
+  },
+  child: const Text('?', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w300)),
+)]),
         ])),
         const Center(child:Text('HABITS',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:3))),
         const SizedBox(height:20),
