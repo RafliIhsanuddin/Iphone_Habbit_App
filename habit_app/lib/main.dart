@@ -4959,7 +4959,7 @@ class _ScheduleScreenState extends State<_ScheduleScreen> {
   @override void initState(){super.initState();final p=DateTime.tryParse(widget.initialStartDate)??DateTime.now();_start=p;final n=DateTime.now();_startIsToday=p.year==n.year&&p.month==n.month&&p.day==n.day;_end=_start.add(const Duration(days:59));}
   @override void dispose(){_dCtrl.dispose();super.dispose();}
   String _fmt(DateTime d)=>'${d.month}/${d.day}/${d.year%100}';
-  String _lbl()=>_startIsToday?'TODAY':_fmt(_start);
+  String _lbl()=>_fmt(_start);
   DateTime _compEnd(){final parsed=int.tryParse(_dCtrl.text);final n=(parsed==null||parsed<=0)?1:parsed;return _start.add(Duration(days:n-1));}
   Widget _pill(String l)=>Container(padding:const EdgeInsets.symmetric(horizontal:14,vertical:6),decoration:BoxDecoration(color:const Color(0xFF2C2C2C),borderRadius:BorderRadius.circular(20)),child:Text(l,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700,letterSpacing:0.3)));
   Widget _row(String l, Widget r, {VoidCallback? onRowTap}) {
