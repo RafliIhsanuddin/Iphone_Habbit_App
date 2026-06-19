@@ -7099,8 +7099,8 @@ class _HelpDialogState extends State<_HelpDialog>
                           ),
                           // Click-flash circle — positioned behind the cursor
                           Positioned(
-                            right: 135,
-                            top: 20,
+                            right: 120,
+                            top: 2.8,
                             child: AnimatedBuilder(
                               animation: _circleAnim,
                               builder: (_, __) {
@@ -7108,8 +7108,8 @@ class _HelpDialogState extends State<_HelpDialog>
                                 final flashOpacity = (1.0 - v).clamp(0.0, 1.0) * (v > 0 ? 1.0 : 0.0);
                                 final baseOpacity = 1.0;
                                 return Container(
-                                  width: 30,
-                                  height: 30,
+                                  width: 36,
+                                  height: 36,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: Colors.white24.withValues(
