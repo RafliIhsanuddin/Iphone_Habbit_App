@@ -6947,6 +6947,7 @@ class _HelpDialog extends StatefulWidget {
 class _HelpDialogState extends State<_HelpDialog>
     with TickerProviderStateMixin {
   bool _isDone = false;
+  int _page = 0;
 
   late AnimationController _animCtrl;
   late Animation<double> _scaleAnim;
@@ -6956,6 +6957,12 @@ class _HelpDialogState extends State<_HelpDialog>
 
   late AnimationController _circleCtrl;
   late Animation<double> _circleAnim;
+
+  late AnimationController _holdPressCtrl;
+  late Animation<double> _holdPressAnim;
+
+  late AnimationController _holdCircleCtrl;
+  late Animation<double> _holdCircleAnim;
 
   @override
   void initState() {
@@ -6987,18 +6994,41 @@ class _HelpDialogState extends State<_HelpDialog>
     );
     _circleCtrl.value = 1.0;
 
+    _holdPressCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _holdPressAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _holdPressCtrl, curve: Curves.easeInOut),
+    );
+
+    _holdCircleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _holdCircleAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _holdCircleCtrl, curve: Curves.easeInOut),
+    );
+
     _runCycle();
+    _runHoldCycle();
   }
 
   Future<void> _runCycle() async {
     while (mounted) {
+      if (_page != 0) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        continue;
+      }
       // Step 1: pause at rest position
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
+      if (_page != 0) continue;
 
       // Step 2: finger moves toward checkbox
       await _cursorCtrl.forward(from: 0).orCancel.catchError((_) {});
       if (!mounted) return;
+      if (_page != 0) continue;
 
       // Step 3: tap — ripple + toggle state + scale pop
       _circleCtrl.forward(from: 0);
@@ -7008,12 +7038,46 @@ class _HelpDialogState extends State<_HelpDialog>
       // Step 4: pause briefly while "tapped"
       await Future.delayed(const Duration(milliseconds: 750));
       if (!mounted) return;
+      if (_page != 0) continue;
 
       // Step 5: finger retreats
       await _cursorCtrl.reverse().orCancel.catchError((_) {});
       if (!mounted) return;
 
       // Step 6: pause before next tap
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  Future<void> _runHoldCycle() async {
+    while (mounted) {
+      if (_page != 1) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        continue;
+      }
+      // Step 1: pause at rest position
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      if (_page != 1) continue;
+
+      // Step 2: finger presses down and holds — circle grows and lingers
+      _holdCircleCtrl.forward(from: 0);
+      await _holdPressCtrl.forward(from: 0).orCancel.catchError((_) {});
+      if (!mounted) return;
+      if (_page != 1) continue;
+
+      // Step 3: hold sustained
+      await Future.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
+      if (_page != 1) continue;
+
+      // Step 4: finger releases
+      await _holdPressCtrl.reverse().orCancel.catchError((_) {});
+      _holdCircleCtrl.reverse();
+      if (!mounted) return;
+      if (_page != 1) continue;
+
+      // Step 5: pause before next hold
       await Future.delayed(const Duration(milliseconds: 500));
     }
   }
@@ -7025,8 +7089,11 @@ class _HelpDialogState extends State<_HelpDialog>
     _animCtrl.dispose();
     _cursorCtrl.dispose();
     _circleCtrl.dispose();
+    _holdPressCtrl.dispose();
+    _holdCircleCtrl.dispose();
     super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -7039,12 +7106,12 @@ class _HelpDialogState extends State<_HelpDialog>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 18),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
               child: Center(
                 child: Text(
                   'TO-DO LIST GESTURES',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
@@ -7110,6 +7177,7 @@ class _HelpDialogState extends State<_HelpDialog>
                               ),
                             ),
                           ),
+                          if (_page == 0)
                           // Click-flash circle — positioned behind the cursor
                           Positioned(
                             right: 120,
@@ -7133,16 +7201,40 @@ class _HelpDialogState extends State<_HelpDialog>
                               },
                             ),
                           ),
+                          if (_page == 1)
+                          // Hold circle — grows and lingers behind the cursor while pressed
+                          Positioned(
+                            right: 120,
+                            top: 2.8,
+                            child: AnimatedBuilder(
+                              animation: _holdCircleAnim,
+                              builder: (_, __) {
+                                final v = _holdCircleAnim.value;
+                                return Container(
+                                  width: 36 + (10 * v),
+                                  height: 36 + (10 * v),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white24.withValues(
+                                      alpha: 0.15 + (0.35 * v),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
                           // Cursor — centered in gap between title and status
                           Positioned(
                             right: 135,
                             top: 20,
                             child: AnimatedBuilder(
-                              animation: _animCtrl,
-                              builder: (_, child) => Transform.scale(
-                                scale: _animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0,
-                                child: child,
-                              ),
+                              animation: _page == 1 ? _holdPressAnim : _animCtrl,
+                              builder: (_, child) {
+                                final scale = _page == 1
+                                    ? 1.0 - (0.12 * _holdPressAnim.value)
+                                    : (_animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0);
+                                return Transform.scale(scale: scale, child: child);
+                              },
                               child: Transform.rotate(
                                 angle: -0.87,
                                 child: const _MouseCursor(),
@@ -7156,12 +7248,14 @@ class _HelpDialogState extends State<_HelpDialog>
                 ],
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               child: Text(
-                'Click on any item in the to-do list to mark it as complete or to update its state.',
+                _page == 0
+                    ? 'Click on any item in the to-do list to mark it as complete or to update its state.'
+                    : 'Long click on any item in the list to access reminders, notes, statistics and more options.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -7174,14 +7268,20 @@ class _HelpDialogState extends State<_HelpDialog>
                 children: [
                   Expanded(
                     child: TextButton(
-                      onPressed: null,
+                      onPressed: () {
+                        if (_page == 0) {
+                          Navigator.pop(context);
+                        } else {
+                          setState(() => _page = 0);
+                        }
+                      },
                       child: const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
                         child: Text(
                           'BACK',
                           style: TextStyle(
                             color: Colors.white,
-                            fontSize: 14,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.5,
                           ),
@@ -7192,14 +7292,20 @@ class _HelpDialogState extends State<_HelpDialog>
                   Container(width: 0.5, color: Colors.white24),
                   Expanded(
                     child: TextButton(
-                      onPressed: null,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
+                      onPressed: () {
+                        if (_page == 0) {
+                          setState(() => _page = 1);
+                        } else {
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Text(
-                          'NEXT',
-                          style: TextStyle(
+                          _page == 0 ? 'NEXT' : 'Got it!',
+                          style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 14,
+                            fontSize: 16,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.5,
                           ),
