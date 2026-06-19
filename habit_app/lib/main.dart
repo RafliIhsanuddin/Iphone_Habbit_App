@@ -6941,8 +6941,8 @@ class _HelpDialogState extends State<_HelpDialog>
   late AnimationController _cursorCtrl;
   late Animation<double> _cursorAnim;
 
-  late AnimationController _rippleCtrl;
-  late Animation<double> _rippleAnim;
+  late AnimationController _circleCtrl;
+  late Animation<double> _circleAnim;
 
   @override
   void initState() {
@@ -6964,13 +6964,15 @@ class _HelpDialogState extends State<_HelpDialog>
       CurvedAnimation(parent: _cursorCtrl, curve: Curves.easeInOut),
     );
 
-    _rippleCtrl = AnimationController(
+
+    _circleCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _rippleAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut),
+    _circleAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _circleCtrl, curve: Curves.easeOut),
     );
+    _circleCtrl.value = 1.0;
 
     _runCycle();
   }
@@ -6986,7 +6988,7 @@ class _HelpDialogState extends State<_HelpDialog>
       if (!mounted) return;
 
       // Step 3: tap — ripple + toggle state + scale pop
-      _rippleCtrl.forward(from: 0);
+      _circleCtrl.forward(from: 0);
       setState(() => _isDone = !_isDone);
       _animCtrl.forward(from: 0);
 
@@ -7009,7 +7011,7 @@ class _HelpDialogState extends State<_HelpDialog>
   void dispose() {
     _animCtrl.dispose();
     _cursorCtrl.dispose();
-    _rippleCtrl.dispose();
+    _circleCtrl.dispose();
     super.dispose();
   }
 
@@ -7095,28 +7097,28 @@ class _HelpDialogState extends State<_HelpDialog>
                               ),
                             ),
                           ),
-                          // Ripple — centered on cursor tip position
-                          AnimatedBuilder(
-                            animation: _rippleAnim,
-                            builder: (_, __) {
-                              final v = _rippleAnim.value;
-                              final size = 18.0 + 28.0 * v;
-                              return Positioned(
-                                right: 120,
-                                top: (38 - size) / 2,
-                                child: Opacity(
-                                  opacity: (1.0 - v).clamp(0.0, 1.0),
-                                  child: Container(
-                                    width: size,
-                                    height: size,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 1.5),
+                          // Click-flash circle — positioned behind the cursor
+                          Positioned(
+                            right: 135,
+                            top: 20,
+                            child: AnimatedBuilder(
+                              animation: _circleAnim,
+                              builder: (_, __) {
+                                final v = _circleAnim.value;
+                                final flashOpacity = (1.0 - v).clamp(0.0, 1.0) * (v > 0 ? 1.0 : 0.0);
+                                final baseOpacity = 1.0;
+                                return Container(
+                                  width: 30,
+                                  height: 30,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white24.withValues(
+                                      alpha: (0.15 * baseOpacity) + (0.45 * flashOpacity),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
                           // Cursor — centered in gap between title and status
                           Positioned(
