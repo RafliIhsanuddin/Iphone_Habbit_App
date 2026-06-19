@@ -80,6 +80,19 @@ class HabitApp extends StatelessWidget {
           scaffoldBackgroundColor: Colors.black,
           useMaterial3: true,
         ),
+         builder: (context, child) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: 402.0,
+              height: 874.0,
+              child: MediaQuery(
+                data: const MediaQueryData(size: Size(402.0, 874.0)),
+                child: child!,
+              ),
+            ),
+          );
+        },
         home: const HabitHomePage(),
       );
 }
