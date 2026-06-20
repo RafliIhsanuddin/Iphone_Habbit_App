@@ -7202,25 +7202,33 @@ class _HelpDialogState extends State<_HelpDialog>
                             ),
                           ),
                           if (_page == 1)
-                          // Hold circle — grows and lingers behind the cursor while pressed
+                          // Hold circle — grows and lingers behind the cursor while pressed.
+                          // Outer box is fixed at the maximum size and centered, so the
+                          // circle's center point never moves as it scales.
                           Positioned(
-                            right: 120,
-                            top: 2.8,
-                            child: AnimatedBuilder(
-                              animation: _holdCircleAnim,
-                              builder: (_, __) {
-                                final v = _holdCircleAnim.value;
-                                return Container(
-                                  width: 36 + (10 * v),
-                                  height: 36 + (10 * v),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white24.withValues(
-                                      alpha: 0.15 + (0.35 * v),
-                                    ),
-                                  ),
-                                );
-                              },
+                            right: 120 - 5,
+                            top: 2.8 - 5,
+                            child: SizedBox(
+                              width: 46,
+                              height: 46,
+                              child: Center(
+                                child: AnimatedBuilder(
+                                  animation: _holdCircleAnim,
+                                  builder: (_, __) {
+                                    final v = _holdCircleAnim.value;
+                                    return Container(
+                                      width: 36 + (10 * v),
+                                      height: 36 + (10 * v),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white24.withValues(
+                                          alpha: 0.15 + (0.35 * v),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
                           // Cursor — centered in gap between title and status
