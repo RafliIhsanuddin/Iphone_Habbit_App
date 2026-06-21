@@ -7061,8 +7061,10 @@ class _HelpDialogState extends State<_HelpDialog>
       if (_page != 1) continue;
 
       // Step 2: finger presses down and holds — circle grows and lingers
-      _holdCircleCtrl.forward(from: 0);
-      await _holdPressCtrl.forward(from: 0).orCancel.catchError((_) {});
+      await Future.wait([
+        _holdPressCtrl.forward(from: 0).orCancel.catchError((_) {}),
+        _holdCircleCtrl.forward(from: 0).orCancel.catchError((_) {}),
+      ]);
       if (!mounted) return;
       if (_page != 1) continue;
 
@@ -7072,8 +7074,10 @@ class _HelpDialogState extends State<_HelpDialog>
       if (_page != 1) continue;
 
       // Step 4: finger releases
-      await _holdPressCtrl.reverse().orCancel.catchError((_) {});
-      _holdCircleCtrl.reverse();
+      await Future.wait([
+        _holdPressCtrl.reverse().orCancel.catchError((_) {}),
+        _holdCircleCtrl.reverse().orCancel.catchError((_) {}),
+      ]);
       if (!mounted) return;
       if (_page != 1) continue;
 
@@ -7165,15 +7169,14 @@ class _HelpDialogState extends State<_HelpDialog>
                                         child: CustomPaint(painter: _BoldCheckPainter()),
                                       )
                                     : Container(
-                                        key: const ValueKey('empty'),
-                                        width: 26,
-                                        height: 26,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2),
-                                          color: Colors.transparent,
-                                        ),
-                                      ),
+                                  key: const ValueKey('empty'),
+                                  width: 26,
+                                  height: 26,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -7213,9 +7216,9 @@ class _HelpDialogState extends State<_HelpDialog>
                               height: 46,
                               child: Center(
                                 child: AnimatedBuilder(
-                                  animation: _holdCircleAnim,
+                                  animation: _holdPressAnim,
                                   builder: (_, __) {
-                                    final v = _holdCircleAnim.value;
+                                    final v = _holdPressAnim.value;
                                     return Container(
                                       width: 36 + (10 * v),
                                       height: 36 + (10 * v),
@@ -7232,7 +7235,7 @@ class _HelpDialogState extends State<_HelpDialog>
                             ),
                           ),
                           // Cursor — centered in gap between title and status
-                          Positioned(
+                          Positioned( 
                             right: 135,
                             top: 20,
                             child: AnimatedBuilder(
