@@ -7244,7 +7244,11 @@ class _HelpDialogState extends State<_HelpDialog>
                                 final scale = _page == 1
                                     ? 1.0 - (0.12 * _holdPressAnim.value)
                                     : (_animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0);
-                                return Transform.scale(scale: scale, child: child);
+                                return Transform.scale(
+                                  scale: scale,
+                                  alignment: const Alignment(1.0, 0.0),
+                                  child: child,
+                                );
                               },
                               child: Transform.rotate(
                                 angle: -0.87,
@@ -7279,6 +7283,14 @@ class _HelpDialogState extends State<_HelpDialog>
                 children: [
                   Expanded(
                     child: TextButton(
+                      style: TextButton.styleFrom(
+                        overlayColor: Colors.transparent,
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        splashFactory: NoSplash.splashFactory,
+                      ).copyWith(
+                        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                      ),
                       onPressed: () {
                         if (_page == 0) {
                           Navigator.pop(context);
@@ -7287,7 +7299,7 @@ class _HelpDialogState extends State<_HelpDialog>
                         }
                       },
                       child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
+                        padding: EdgeInsets.symmetric(vertical: 18),
                         child: Text(
                           'BACK',
                           style: TextStyle(
@@ -7303,6 +7315,14 @@ class _HelpDialogState extends State<_HelpDialog>
                   Container(width: 0.5, color: Colors.white24),
                   Expanded(
                     child: TextButton(
+                      style: TextButton.styleFrom(
+                        overlayColor: Colors.transparent,
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        splashFactory: NoSplash.splashFactory,
+                      ).copyWith(
+                        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                      ),
                       onPressed: () {
                         if (_page == 0) {
                           setState(() => _page = 1);
@@ -7311,7 +7331,7 @@ class _HelpDialogState extends State<_HelpDialog>
                         }
                       },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
                         child: Text(
                           _page == 0 ? 'NEXT' : 'Got it!',
                           style: const TextStyle(
@@ -7390,6 +7410,279 @@ class _MouseCursorPainter extends CustomPainter {
   bool shouldRepaint(_MouseCursorPainter o) => false;
 }
 
+// ─── Calendar Picker Bottom Sheet ──────────────────────────────────────────────
+
+class _CalendarPickerSheet extends StatefulWidget {
+  final DateTime initialMonth;
+  final DateTime selectedDate;
+  const _CalendarPickerSheet({required this.initialMonth, required this.selectedDate});
+  @override State<_CalendarPickerSheet> createState() => _CalendarPickerSheetState();
+}
+
+class _CalendarPickerSheetState extends State<_CalendarPickerSheet> {
+  late DateTime _displayMonth;
+  late DateTime _selected;
+
+  static const _monthNames = [
+    'JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE',
+    'JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'
+  ];
+  static const _weekLabels = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+  @override
+  void initState() {
+    super.initState();
+    _displayMonth = DateTime(widget.initialMonth.year, widget.initialMonth.month, 1);
+    _selected = widget.selectedDate;
+  }
+
+  void _prevMonth() => setState(() => _displayMonth = DateTime(_displayMonth.year, _displayMonth.month - 1, 1));
+  void _nextMonth() => setState(() => _displayMonth = DateTime(_displayMonth.year, _displayMonth.month + 1, 1));
+
+  int _daysInMonth(int year, int month) => DateTime(year, month + 1, 0).day;
+  int _firstWeekday(int year, int month) {
+    final d = DateTime(year, month, 1);
+    return d.weekday % 7; // Sun=0..Sat=6
+  }
+
+  void _selectDate(DateTime date) {
+    Navigator.pop(context, date);
+  }
+
+  void _close() {
+    Navigator.pop(context, null);
+  }
+
+  void _today() {
+    final now = DateTime.now();
+    Navigator.pop(context, DateTime(now.year, now.month, now.day));
+  }
+
+  Widget _buildGrid() {
+    final year = _displayMonth.year;
+    final month = _displayMonth.month;
+    final daysInMonth = _daysInMonth(year, month);
+    final firstWd = _firstWeekday(year, month);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    final totalCells = firstWd + daysInMonth;
+    final rows = (totalCells / 7).ceil();
+    final prevMonthDays = _daysInMonth(
+      month == 1 ? year - 1 : year,
+      month == 1 ? 12 : month - 1,
+    );
+
+    return Column(
+      children: List.generate(rows, (row) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(7, (col) {
+              final cellIndex = row * 7 + col;
+              final dayNum = cellIndex - firstWd + 1;
+
+              final bool isOutsideMonth = dayNum < 1 || dayNum > daysInMonth;
+
+              late final DateTime date;
+              late final int displayNum;
+              if (dayNum < 1) {
+                displayNum = prevMonthDays + dayNum;
+                final prevMonth = month == 1 ? 12 : month - 1;
+                final prevYear = month == 1 ? year - 1 : year;
+                date = DateTime(prevYear, prevMonth, displayNum);
+              } else if (dayNum > daysInMonth) {
+                displayNum = dayNum - daysInMonth;
+                final nextMonth = month == 12 ? 1 : month + 1;
+                final nextYear = month == 12 ? year + 1 : year;
+                date = DateTime(nextYear, nextMonth, displayNum);
+              } else {
+                displayNum = dayNum;
+                date = DateTime(year, month, dayNum);
+              }
+
+              final isToday = date.year == today.year && date.month == today.month && date.day == today.day;
+              final isSelected = date.year == _selected.year && date.month == _selected.month && date.day == _selected.day;
+
+              Color bg;
+              Color fg;
+              bool ringBorder = false;
+              if (isOutsideMonth) {
+                if (isSelected && isToday) {
+                  bg = Colors.white24;
+                  fg = Colors.white38;
+                } else if (isSelected) {
+                  bg = Colors.white24;
+                  fg = Colors.white38;
+                } else if (isToday) {
+                  bg = const Color(0xFF3A3A3A);
+                  fg = Colors.white30;
+                } else {
+                  bg = Colors.transparent;
+                  fg = Colors.white24;
+                }
+              } else {
+                if (isSelected && isToday) {
+                  bg = Colors.white;
+                  fg = const Color(0xFF6B6B6B);
+                } else if (isSelected) {
+                  bg = Colors.white;
+                  fg = Colors.black;
+                } else if (isToday) {
+                  bg = const Color(0xFF3A3A3A);
+                  fg = Colors.white;
+                } else {
+                  bg = Colors.transparent;
+                  fg = Colors.white;
+                }
+              }
+
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _selectDate(date),
+                child: SizedBox(
+                  width: 42,
+                  height: 42,
+                  child: Center(
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: bg,
+                        border: ringBorder
+                            ? Border.all(color: Colors.black, width: 2)
+                            : null,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$displayNum',
+                        style: TextStyle(
+                          color: fg,
+                          fontSize: 14,
+                          fontWeight: (isSelected || isToday) ? FontWeight.w800 : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        final v = details.primaryVelocity ?? 0;
+        if (v < -200) {
+          _nextMonth();
+        } else if (v > 200) {
+          _prevMonth();
+        }
+      },
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E1E1E),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 4),
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  Text(
+                    '${_monthNames[_displayMonth.month - 1]} ${_displayMonth.year}',
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _prevMonth,
+                    child: const Padding(padding: EdgeInsets.all(6), child: Icon(Icons.chevron_left, color: Colors.white, size: 24)),
+                  ),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _nextMonth,
+                    child: const Padding(padding: EdgeInsets.all(6), child: Icon(Icons.chevron_right, color: Colors.white, size: 24)),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: _weekLabels.map((l) => SizedBox(
+                  width: 42,
+                  child: Center(
+                    child: Text(l, style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                  ),
+                )).toList(),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: _buildGrid(),
+            ),
+            const SizedBox(height: 12),
+            Container(height: 0.5, color: Colors.white24),
+            IntrinsicHeight(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _close,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: const Center(
+                          child: Text('Close', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Container(width: 0.5, color: Colors.white24),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: _today,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        child: const Center(
+                          child: Text('TODAY', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 // ─── Habit Home Page ──────────────────────────────────────────────────────────
 
@@ -7420,7 +7713,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
   void _nextMonth()=>setState((){_sel=DateTime(_sel.year,_sel.month+1,1);_weekStart=_monday(_sel);});
   void _back()=>setState(()=>_weekStart=_weekStart.subtract(const Duration(days:7)));
   void _fwd()=>setState(()=>_weekStart=_weekStart.add(const Duration(days:7)));
-  void _pick(DateTime d)=>setState(()=>_sel=d);
+  void _pick(DateTime d)=>setState((){_sel=d;_weekStart=_monday(d);});
 
   bool _isScheduledOn(Habit h, DateTime day) => _habitIsScheduledOn(h, day);
 
@@ -7620,7 +7913,21 @@ class _HabitHomePageState extends State<HabitHomePage> {
               Text(_dateLabel,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.3)),
             ]),
           ])),
-          Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),const Icon(Icons.calendar_month,color:Colors.white,size:22),const SizedBox(width:18),GestureDetector(
+          Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),GestureDetector(
+  behavior: HitTestBehavior.opaque,
+  onTap: () {
+    showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      builder: (_) => _CalendarPickerSheet(initialMonth: _sel, selectedDate: _sel),
+    ).then((picked) {
+      if (picked != null && mounted) _pick(picked);
+    });
+  },
+  child: const Icon(Icons.calendar_month,color:Colors.white,size:22),
+),const SizedBox(width:18),GestureDetector(
   behavior: HitTestBehavior.opaque,
   onTap: () {
     showDialog(
