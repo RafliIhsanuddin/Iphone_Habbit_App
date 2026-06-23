@@ -5070,6 +5070,7 @@ class CategorySelectionScreen extends StatefulWidget {
 
 class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
   final _scrollCtrl = ScrollController();
+  List<String> _customSnapshot = CategoryStore.custom;
   static const _defaultCats = ['MEDITATION', 'SPORT', 'ENTERTAINMENT', 'ART', 'STUDY', 'QUIT A BAD HABIT'];
   static const int _maxVisibleCategories = 10;
   static const double _rowHeight = 54.0;
@@ -5084,7 +5085,80 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
     return GestureDetector(
       onTap: () async {
         if (c == 'CREATE CATEGORY') {
-          Navigator.pop(context, c);
+          showModalBottomSheet<String>(
+            context: context,
+            backgroundColor: Colors.transparent,
+            isScrollControlled: true,
+            useRootNavigator: true,
+            builder: (_) => _NewCategorySheet(existingCustom: List.from(CategoryStore.custom)),
+          ).then((name) async {
+            if (name == null || !context.mounted) return;
+            await CategoryStore.add(name);
+            if (!context.mounted) return;
+            setState(() => _customSnapshot = CategoryStore.custom);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!context.mounted) return;
+              showDialog(
+                context: context,
+                builder: (_) => Dialog(
+                  backgroundColor: const Color(0xFF2C2C2C),
+                  insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                        child: Center(child: Text('CATEGORY CREATED', textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
+                      ),
+                      Container(height: 0.5, color: Colors.white24),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => Navigator.pop(context),
+                        child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                          child: const Center(child: Text('OK', textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+                      ),
+                    ]),
+                  ),
+                ),
+              );
+            });
+            final res = await Navigator.push<HabitScheduleResult>(
+              context,
+              MaterialPageRoute(builder: (_) => HabitDetailScreen(category: name, startDate: widget.startDate)),
+            );
+            if (!context.mounted) return;
+            if (false)
+            await showDialog(
+              context: context,
+              builder: (_) => Dialog(
+                backgroundColor: const Color(0xFF2C2C2C),
+                insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 24, 20, 20),
+                      child: Center(child: Text('CATEGORY CREATED', textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
+                    ),
+                    Container(height: 0.5, color: Colors.white24),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => Navigator.pop(context),
+                      child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: const Center(child: Text('OK', textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
+                    ),
+                  ]),
+                ),
+              ),
+            );
+            if (res != null && context.mounted) Navigator.pop(context, res);
+          });
           return;
         }
         final res = await Navigator.push<HabitScheduleResult>(
@@ -5095,7 +5169,24 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Text(c, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+        child: c == 'CREATE CATEGORY'
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(c, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white54, width: 1.5),
+                    ),
+                    child: const Icon(Icons.add, color: Colors.white54, size: 18),
+                  ),
+                ],
+              )
+            : Text(c, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
       ),
     );
   }
@@ -5103,7 +5194,7 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
   @override
   Widget build(BuildContext context) {
     final categories = [
-      ...CategoryStore.custom,
+      ..._customSnapshot,
       ..._defaultCats,
       'CREATE CATEGORY',
     ];
@@ -5132,7 +5223,7 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
                 trackVisibility: true,
                 child: ListView.builder(
                   controller: _scrollCtrl,
-                  padding: EdgeInsets.zero,
+                  padding: const EdgeInsets.only(right: 8),
                   itemCount: categories.length,
                   itemExtent: _rowHeight,
                   itemBuilder: (ctx, i) => _row(ctx, categories[i]),
@@ -5140,36 +5231,37 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
               ),
             ),
           )
-        : Expanded(
-            child: ListView.builder(
-              controller: _scrollCtrl,
-              padding: EdgeInsets.zero,
-              itemCount: categories.length,
-              itemBuilder: (ctx, i) => _row(ctx, categories[i]),
-            ),
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: categories.map((c) => _row(context, c)).toList(),
           );
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('SELECT A CATEGORY FOR YOUR HABIT', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1)),
-              const SizedBox(height: 32),
-              categoryList,
-              if (needsScroll) const Spacer(),
-              GestureDetector(
-                onTap: () => Navigator.pop(context, null),
-                child: const Padding(
-                  padding: EdgeInsets.only(top: 16),
-                  child: Text('BACK', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('SELECT A CATEGORY FOR YOUR HABIT', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1)),
+                  const SizedBox(height: 32),
+                  categoryList,
+                  if (needsScroll) const Spacer(),
+                ],
               ),
-            ],
-          ),
+            ),
+            Positioned(
+              left: 24,
+              bottom: 24,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context, null),
+                child: const Text('BACK', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -5184,6 +5276,7 @@ class StartDateModal extends StatelessWidget {
   String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
   // REPLACE WITH
   Future<void> _nav(BuildContext ctx,DateTime sd)async{
+    Navigator.pop(ctx);
     final res=await Navigator.push<dynamic>(ctx,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String())));
     if(res!=null&&ctx.mounted){
       if(res is HabitScheduleResult)Navigator.pop(ctx,res);
@@ -7697,8 +7790,35 @@ class _HabitHomePageState extends State<HabitHomePage> {
   final List<Habit> _all=[];
   final _ctrl=TextEditingController();
   final _scaffoldKey=GlobalKey<ScaffoldState>();
+  Timer? _midnightTimer;
+  DateTime _lastKnownToday=DateTime.now();
 
-  @override void initState(){super.initState();_weekStart=_monday(_sel);}
+  @override
+  void initState() {
+    super.initState();
+    _weekStart = _monday(_sel);
+    final now = DateTime.now();
+    _lastKnownToday = DateTime(now.year, now.month, now.day);
+    _midnightTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkDateRollover());
+  }
+
+  void _checkDateRollover() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (today != _lastKnownToday) {
+      final wasOnOldToday = _sel.year == _lastKnownToday.year &&
+          _sel.month == _lastKnownToday.month &&
+          _sel.day == _lastKnownToday.day;
+      setState(() {
+        _lastKnownToday = today;
+        if (wasOnOldToday) {
+          _sel = today;
+          _weekStart = _monday(today);
+        }
+      });
+    }
+  }
+
   DateTime _monday(DateTime d)=>d.subtract(Duration(days:d.weekday-1));
   List<DateTime> get _week=>List.generate(7,(i)=>_weekStart.add(Duration(days:i)));
 
@@ -7827,12 +7947,13 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   Future<void> _add()async{
     final now=DateTime.now();
-    final isToday=_sel.year==now.year&&_sel.month==now.month&&_sel.day==now.day;
+    final today=DateTime(now.year,now.month,now.day);
+    final isToday=_sel.year==today.year&&_sel.month==today.month&&_sel.day==today.day;
     if(isToday){
-      final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:now.toIso8601String())));
+      final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:today.toIso8601String())));
       if(res!=null&&mounted)_addFromResult(res);
-    }else{
-      final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
+    }else{final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
+      
       if(res!=null&&mounted)_addFromResult(res);
     }
   }
@@ -7985,5 +8106,10 @@ class _HabitHomePageState extends State<HabitHomePage> {
     );
   }
 
-  @override void dispose(){_ctrl.dispose();super.dispose();}
+  @override
+  void dispose() {
+    _midnightTimer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
+  }
 }
