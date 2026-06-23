@@ -5068,6 +5068,31 @@ class CategorySelectionScreen extends StatefulWidget {
   State<CategorySelectionScreen> createState() => _CategorySelectionScreenState();
 }
 
+class _BoldPlusPainter extends CustomPainter {
+  final Color color;
+  const _BoldPlusPainter(this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 4.6
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(
+      Offset(size.width * 0.5, 0),
+      Offset(size.width * 0.5, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height * 0.5),
+      Offset(size.width, size.height * 0.5),
+      paint,
+    );
+  }
+  @override
+  bool shouldRepaint(_BoldPlusPainter o) => o.color != color;
+}
+
 class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
   final _scrollCtrl = ScrollController();
   List<String> _customSnapshot = CategoryStore.custom;
@@ -5176,13 +5201,20 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
                   Text(c, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                   const SizedBox(width: 12),
                   Container(
-                    width: 28,
-                    height: 28,
+                    width: 40,
+                    height: 40,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white54, width: 1.5),
+                      border: Border.all(color: Colors.white54, width: 5.0),
                     ),
-                    child: const Icon(Icons.add, color: Colors.white54, size: 18),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CustomPaint(painter: _BoldPlusPainter(Colors.white54)),
+                      ),
+                    ),
                   ),
                 ],
               )
