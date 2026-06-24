@@ -87,7 +87,7 @@ class HabitApp extends StatelessWidget {
               width: 402.0,
               height: 874.0,
               child: MediaQuery(
-                data: const MediaQueryData(size: Size(402.0, 874.0)),
+                data: MediaQuery.of(context).copyWith(size: const Size(402.0, 874.0)),
                 child: child!,
               ),
             ),
@@ -7825,6 +7825,7 @@ class HabitHomePage extends StatefulWidget {
 }
 
 class _HabitHomePageState extends State<HabitHomePage> {
+  bool _searchOpen=false;
   DateTime _sel=DateTime.now();
   late DateTime _weekStart;
   final List<Habit> _all=[];
@@ -8074,7 +8075,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
               Text(_dateLabel,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.3)),
             ]),
           ])),
-          Row(children:[const Icon(Icons.search,color:Colors.white,size:22),const SizedBox(width:18),GestureDetector(
+          Row(children:[GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=true),child:const Icon(Icons.search,color:Colors.white,size:22)),const SizedBox(width:18),GestureDetector(
   behavior: HitTestBehavior.opaque,
   onTap: () {
     showModalBottomSheet<DateTime>(
@@ -8100,6 +8101,22 @@ class _HabitHomePageState extends State<HabitHomePage> {
   child: const Text('?', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w300)),
 )]),
         ])),
+        if(_searchOpen)Container(
+          margin:const EdgeInsets.fromLTRB(12,0,12,12),
+          decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(12),border:Border.all(color:Colors.black,width:1)),
+          child:Column(children:[
+            Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('SELECT A CATEGORY',style:TextStyle(color:Colors.black,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+            Container(height:1,color:Colors.black),
+            Row(children:[
+              const Padding(padding:EdgeInsets.symmetric(horizontal:14,vertical:14),child:Icon(Icons.search,color:Colors.black,size:20)),
+              const Expanded(child:Text('ACTIVITY NAME',style:TextStyle(color:Color(0xFF9E9E9E),fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5))),
+              Container(width:1,height:48,color:Colors.black),
+              const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.delete_outline,color:Colors.black,size:22)),
+              Container(width:1,height:48,color:Colors.black),
+              GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=false),child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.keyboard_arrow_up,color:Colors.black,size:22))),
+            ]),
+          ]),
+        ),
         const Center(child:Text('HABITS',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:3))),
         const SizedBox(height:20),
         Padding(padding:const EdgeInsets.symmetric(horizontal:20),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
