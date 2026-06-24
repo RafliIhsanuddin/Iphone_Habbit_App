@@ -1601,6 +1601,9 @@ class _CategorySelectDialog extends StatefulWidget {
   @override State<_CategorySelectDialog> createState() => _CategorySelectDialogState();
 }
 
+const double _kCreateCategoryIconOffsetX = 20.0;
+const double _kCreateCategoryIconOffsetY = 0.0;
+
 class _CategorySelectDialogState extends State<_CategorySelectDialog> {
   final _scrollCtrl = ScrollController();
   static const _defaultCategories = [
@@ -5075,7 +5078,7 @@ class _BoldPlusPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 4.6
+      ..strokeWidth = 2.8
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
     canvas.drawLine(
@@ -5108,6 +5111,7 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
 
   Widget _row(BuildContext context, String c) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () async {
         if (c == 'CREATE CATEGORY') {
           showModalBottomSheet<String>(
@@ -5192,7 +5196,8 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
         );
         if (res != null && context.mounted) Navigator.pop(context, res);
       },
-      child: Padding(
+      child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: c == 'CREATE CATEGORY'
             ? Row(
@@ -5200,19 +5205,22 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
                 children: [
                   Text(c, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                   const SizedBox(width: 12),
-                  Container(
-                    width: 40,
-                    height: 40,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white54, width: 5.0),
-                    ),
-                    child: const Center(
-                      child: SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CustomPaint(painter: _BoldPlusPainter(Colors.white54)),
+                  Transform.translate(
+                    offset: const Offset(_kCreateCategoryIconOffsetX, _kCreateCategoryIconOffsetY),
+                    child: Container(
+                      width: 25,
+                      height: 25,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white54, width: 3.0),
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 10,
+                          height: 10,
+                          child: CustomPaint(painter: _BoldPlusPainter(Colors.white54)),
+                        ),
                       ),
                     ),
                   ),
