@@ -8005,13 +8005,13 @@ class _HabitHomePageState extends State<HabitHomePage> {
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:today.toIso8601String())));
       if(res!=null&&mounted){
         _addFromResult(res);
-        setState(() {});
       }
-    }else{final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
-      
+    }else{
+      final pickedDate=await showDialog<DateTime>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>_StartDatePickerModal(selectedDate:_sel));
+      if(pickedDate==null||!mounted)return;
+      final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:pickedDate.toIso8601String())));
       if(res!=null&&mounted){
         _addFromResult(res);
-        setState(() {});
       }
     }
   }
@@ -8027,7 +8027,11 @@ class _HabitHomePageState extends State<HabitHomePage> {
       final sd=r['startDate']!=null?DateTime.tryParse(r['startDate'] as String)??DateTime.now():DateTime.now();
       _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd));
     }
-    if (mounted) setState(() {});
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   @override
