@@ -5190,7 +5190,7 @@ class _CategorySelectionScreenState extends State<CategorySelectionScreen> {
           });
           return;
         }
-        final res = await Navigator.push<HabitScheduleResult>(
+        final res = await Navigator.push<dynamic>(
           context,
           MaterialPageRoute(builder: (_) => HabitDetailScreen(category: c, startDate: widget.startDate)),
         );
@@ -5316,12 +5316,11 @@ class StartDateModal extends StatelessWidget {
   String _fmt(DateTime d){const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return '${m[d.month-1]} ${d.day}, ${d.year}';}
   // REPLACE WITH
   Future<void> _nav(BuildContext ctx,DateTime sd)async{
-    Navigator.pop(ctx);
     final res=await Navigator.push<dynamic>(ctx,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:sd.toIso8601String())));
-    if(res!=null&&ctx.mounted){
-      if(res is HabitScheduleResult)Navigator.pop(ctx,res);
-      else if(res is String)Navigator.pop(ctx,HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[]));
-    }
+    if(!ctx.mounted)return;
+    if(res is HabitScheduleResult)Navigator.pop(ctx,res);
+    else if(res is String)Navigator.pop(ctx,HabitScheduleResult(title:res,description:'',category:res,startDate:sd.toIso8601String(),frequency:'',endDate:'',priority:1,reminders:[]));
+    else Navigator.pop(ctx,null);
   }
   @override
   Widget build(BuildContext context){
@@ -7880,6 +7879,12 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   List<Habit> _forDay(DateTime d) => _all.where((h) => _isScheduledOn(h, d)).toList();
 
+  List<Habit> _applySearchFilter(List<Habit> source) {
+    if (_searchQuery.trim().isEmpty) return source;
+    final q = _searchQuery.trim().toLowerCase();
+    return source.where((h) => h.title.toLowerCase().startsWith(q)).toList();
+  }
+
   double _progress(DateTime day){
     final h=_forDay(day);
     if(h.isEmpty)return 0;
@@ -7887,7 +7892,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
   }
 
   List<Habit> get _sorted{
-    final h=_forDay(_sel);
+  final h=_applySearchFilter(_forDay(_sel));
     final empty=h.where((x)=>x.stateOn(_sel)==HabitState.empty||x.stateOn(_sel)==HabitState.skipped).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
     final done=h.where((x)=>x.stateOn(_sel)!=HabitState.empty&&x.stateOn(_sel)!=HabitState.skipped).toList()..sort((a,b)=>b.priority.compareTo(a.priority));
     return [...empty,...done];
@@ -7992,10 +7997,16 @@ class _HabitHomePageState extends State<HabitHomePage> {
     final isToday=_sel.year==today.year&&_sel.month==today.month&&_sel.day==today.day;
     if(isToday){
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:today.toIso8601String())));
-      if(res!=null&&mounted)_addFromResult(res);
+      if(res!=null&&mounted){
+        _addFromResult(res);
+        setState(() {});
+      }
     }else{final res=await showDialog<dynamic>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>StartDateModal(selectedDate:_sel));
       
-      if(res!=null&&mounted)_addFromResult(res);
+      if(res!=null&&mounted){
+        _addFromResult(res);
+        setState(() {});
+      }
     }
   }
 
@@ -8003,13 +8014,14 @@ class _HabitHomePageState extends State<HabitHomePage> {
     if(r is HabitScheduleResult){
       final sd=DateTime.tryParse(r.startDate)??DateTime.now();
       final ed=r.endDate.isNotEmpty?DateTime.tryParse(r.endDate):null;
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency,freqWeekDays:Map.from(r.freqWeekDays),freqMonthDays:Set.from(r.freqMonthDays),freqYearDays:List.from(r.freqYearDays),freqPeriodDays:r.freqPeriodDays,freqPeriodUnit:r.freqPeriodUnit,freqRepeatEvery:r.freqRepeatEvery,freqFlexible:r.freqFlexible)));
+      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency,freqWeekDays:Map.from(r.freqWeekDays),freqMonthDays:Set.from(r.freqMonthDays),freqYearDays:List.from(r.freqYearDays),freqPeriodDays:r.freqPeriodDays,freqPeriodUnit:r.freqPeriodUnit,freqRepeatEvery:r.freqRepeatEvery,freqFlexible:r.freqFlexible));
     }else if(r is String){
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now())));
+      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now()));
     }else if(r is Map){
       final sd=r['startDate']!=null?DateTime.tryParse(r['startDate'] as String)??DateTime.now():DateTime.now();
-      setState(()=>_all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd)));
+      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd));
     }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -8108,13 +8120,28 @@ class _HabitHomePageState extends State<HabitHomePage> {
             Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('SELECT A CATEGORY',style:TextStyle(color:Colors.black,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
             Container(height:1,color:Colors.black),
             Row(children:[
-              const Padding(padding:EdgeInsets.symmetric(horizontal:14,vertical:14),child:Icon(Icons.search,color:Colors.black,size:20)),
-              const Expanded(child:Text('ACTIVITY NAME',style:TextStyle(color:Color(0xFF9E9E9E),fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5))),
-              Container(width:1,height:48,color:Colors.black),
-              const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.delete_outline,color:Colors.black,size:22)),
-              Container(width:1,height:48,color:Colors.black),
-              GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=false),child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.keyboard_arrow_up,color:Colors.black,size:22))),
-            ]),
+  const Padding(padding:EdgeInsets.symmetric(horizontal:14,vertical:14),child:Icon(Icons.search,color:Colors.black,size:20)),
+  Expanded(child:TextField(
+    controller:_searchCtrl,
+    cursorColor:Colors.black,
+    style:const TextStyle(color:Colors.black,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5),
+    decoration:const InputDecoration(
+      border:InputBorder.none,
+      isDense:true,
+      hintText:'ACTIVITY NAME',
+      hintStyle:TextStyle(color:Color(0xFF9E9E9E),fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5),
+    ),
+    onChanged:(v)=>setState(()=>_searchQuery=v),
+  )),
+  Container(width:1,height:48,color:Colors.black),
+  GestureDetector(
+    behavior:HitTestBehavior.opaque,
+    onTap:_clearSearch,
+    child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.delete,color:Colors.black,size:22)),
+  ),
+  Container(width:1,height:48,color:Colors.black),
+  GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=false),child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.keyboard_arrow_up,color:Colors.black,size:22))),
+]),
           ]),
         ),
         const Center(child:Text('HABITS',style:TextStyle(color:Colors.white,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:3))),
@@ -8146,7 +8173,23 @@ class _HabitHomePageState extends State<HabitHomePage> {
         ])),
         const SizedBox(height:24),
         Container(height:0.5,color:Colors.white12),
-        Expanded(child:sorted.isEmpty
+        Expanded(child:sorted.isEmpty&&_searchQuery.trim().isNotEmpty
+          ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
+              Text(_dateLabel,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.3)),
+              const SizedBox(height:16),
+              const Text('No matches for the current filter',style:TextStyle(color:Colors.white38,fontSize:13,fontWeight:FontWeight.w500)),
+              const SizedBox(height:16),
+              GestureDetector(
+                behavior:HitTestBehavior.opaque,
+                onTap:_clearSearch,
+                child:Container(
+                  padding:const EdgeInsets.symmetric(horizontal:16,vertical:8),
+                  decoration:BoxDecoration(color:const Color(0xFF111111),borderRadius:BorderRadius.circular(20)),
+                  child:const Text('remove filters',style:TextStyle(color:Colors.white38,fontSize:13,fontWeight:FontWeight.w600)),
+                ),
+              ),
+            ]))
+          :sorted.isEmpty
           ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[Container(width:56,height:56,decoration:BoxDecoration(shape:BoxShape.circle,border:Border.all(color:Colors.white12)),child:const Icon(Icons.add,color:Colors.white24,size:28)),const SizedBox(height:16),const Text('NO HABITS YET',style:TextStyle(color:Colors.white24,fontSize:12,letterSpacing:3,fontWeight:FontWeight.w600)),const SizedBox(height:6),const Text('Tap + to add your first habit',style:TextStyle(color:Colors.white24,fontSize:12))]))
           :_HabitAnimatedList(
               habits:sorted,
@@ -8163,10 +8206,28 @@ class _HabitHomePageState extends State<HabitHomePage> {
     );
   }
 
+  String _searchQuery = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
+  void _clearSearch() {
+    setState(() {
+      _searchCtrl.clear();
+      _searchQuery = '';
+    });
+  }
+
   @override
   void dispose() {
-    _midnightTimer?.cancel();
-    _ctrl.dispose();
-    super.dispose();
+  _midnightTimer?.cancel();
+  _ctrl.dispose();
+  _searchCtrl.dispose();   // added
+  super.dispose();
   }
+
+  
+
+
+
+
+
 }
