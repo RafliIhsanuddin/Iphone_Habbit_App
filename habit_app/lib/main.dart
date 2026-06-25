@@ -7867,6 +7867,12 @@ class _HabitHomePageState extends State<HabitHomePage> {
     const m=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return '${wd[_sel.weekday-1]}, ${_sel.day} ${m[_sel.month-1]} ${_sel.year}';
   }
+  String get _dateLabelFull{
+    const wd=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    const m=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return '${wd[_sel.weekday-1]}, ${_sel.day} ${m[_sel.month-1]} ${_sel.year}';
+  }
+
   String get _monthName{const m=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];return m[_sel.month-1];}
 
   void _prevMonth()=>setState((){_sel=DateTime(_sel.year,_sel.month-1,1);_weekStart=_monday(_sel);});
@@ -8078,7 +8084,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
         ),
       ])))),
       body:SafeArea(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
+        if(!_searchOpen)Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
           Expanded(child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
             GestureDetector(onTap:()=>_scaffoldKey.currentState?.openDrawer(),child:const Padding(padding:EdgeInsets.only(right:10),child:Icon(Icons.menu,color:Colors.white,size:22))),
             Column(crossAxisAlignment:CrossAxisAlignment.start,mainAxisSize:MainAxisSize.min,children:[
@@ -8114,22 +8120,22 @@ class _HabitHomePageState extends State<HabitHomePage> {
 )]),
         ])),
         if(_searchOpen)Container(
-          margin:const EdgeInsets.fromLTRB(12,0,12,12),
+          margin:const EdgeInsets.fromLTRB(0,0,0,12),
           decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(12),border:Border.all(color:Colors.black,width:1)),
           child:Column(children:[
-            Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('SELECT A CATEGORY',style:TextStyle(color:Colors.black,fontSize:18,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+            Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('SELECT A CATEGORY',style:TextStyle(color:Colors.black,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
             Container(height:1,color:Colors.black),
             Row(children:[
   const Padding(padding:EdgeInsets.symmetric(horizontal:14,vertical:14),child:Icon(Icons.search,color:Colors.black,size:20)),
   Expanded(child:TextField(
     controller:_searchCtrl,
     cursorColor:Colors.black,
-    style:const TextStyle(color:Colors.black,fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5),
+    style:const TextStyle(color:Colors.black,fontSize:20,fontWeight:FontWeight.w700,letterSpacing:0.5),
     decoration:const InputDecoration(
       border:InputBorder.none,
       isDense:true,
       hintText:'ACTIVITY NAME',
-      hintStyle:TextStyle(color:Color(0xFF9E9E9E),fontSize:16,fontWeight:FontWeight.w700,letterSpacing:0.5),
+      hintStyle:TextStyle(color:Color(0xFF9E9E9E),fontSize:20,fontWeight:FontWeight.w700,letterSpacing:0.5),
     ),
     onChanged:(v)=>setState(()=>_searchQuery=v),
   )),
@@ -8137,10 +8143,10 @@ class _HabitHomePageState extends State<HabitHomePage> {
   GestureDetector(
     behavior:HitTestBehavior.opaque,
     onTap:_clearSearch,
-    child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.delete,color:Colors.black,size:22)),
+    child:Container(height:48,padding:const EdgeInsets.symmetric(horizontal:14),alignment:Alignment.center,child:const Icon(Icons.delete,color:Colors.black,size:22)),
   ),
   Container(width:1,height:48,color:Colors.black),
-  GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=false),child:const Padding(padding:EdgeInsets.symmetric(horizontal:14),child:Icon(Icons.keyboard_arrow_up,color:Colors.black,size:22))),
+  GestureDetector(behavior:HitTestBehavior.opaque,onTap:()=>setState(()=>_searchOpen=false),child:Container(height:48,padding:const EdgeInsets.symmetric(horizontal:14),alignment:Alignment.center,child:const Icon(Icons.keyboard_arrow_up,color:Colors.black,size:22))),
 ]),
           ]),
         ),
@@ -8175,9 +8181,9 @@ class _HabitHomePageState extends State<HabitHomePage> {
         Container(height:0.5,color:Colors.white12),
         Expanded(child:sorted.isEmpty&&_searchQuery.trim().isNotEmpty
           ?Center(child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
-              Text(_dateLabel,style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w600,letterSpacing:0.3)),
+              Text((_searchOpen?_dateLabelFull:_dateLabel).toUpperCase(),style:TextStyle(color:Colors.white,fontSize:_searchOpen?14:10,fontWeight:FontWeight.w600,letterSpacing:0.3)),
               const SizedBox(height:16),
-              const Text('No matches for the current filter',style:TextStyle(color:Colors.white38,fontSize:13,fontWeight:FontWeight.w500)),
+              Text('No matches for the current filter',style:TextStyle(color:Colors.white38,fontSize:_searchOpen?13:9,fontWeight:FontWeight.w500)),
               const SizedBox(height:16),
               GestureDetector(
                 behavior:HitTestBehavior.opaque,
@@ -8185,7 +8191,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
                 child:Container(
                   padding:const EdgeInsets.symmetric(horizontal:16,vertical:8),
                   decoration:BoxDecoration(color:const Color(0xFF111111),borderRadius:BorderRadius.circular(20)),
-                  child:const Text('remove filters',style:TextStyle(color:Colors.white38,fontSize:13,fontWeight:FontWeight.w600)),
+                  child:Text('remove filters',style:TextStyle(color:Colors.white38,fontSize:_searchOpen?13:9,fontWeight:FontWeight.w600)),
                 ),
               ),
             ]))
