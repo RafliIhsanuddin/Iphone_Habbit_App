@@ -4798,9 +4798,22 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
                                     _alert('Select at least one day');
                                     return;
                                   }
-                                  if (_sel == 'REPEAT' && _repeatEvery <= 1) {
-                                    _alert('ENTER A FREQUENCY GREATER THAN 1');
-                                    return;
+                                  if (_sel == 'SOME DAYS PER PERIOD') {
+                                    final max = _periodUnit == 'WEEK' ? 7 : _periodUnit == 'MONTH' ? 28 : 365;
+                                    if (_periodDays > max) {
+                                      _alert('enter a frequency less than or equal to $max');
+                                      return;
+                                    }
+                                  }
+                                  if (_sel == 'REPEAT') {
+                                    if (_repeatEvery <= 1) {
+                                      _alert('ENTER A FREQUENCY GREATER THAN 1');
+                                      return;
+                                    }
+                                    if (_repeatEvery > 365) {
+                                      _alert('enter a frequency less than or equal to 365');
+                                      return;
+                                    }
                                   }
                                   final res = await Navigator.push<HabitScheduleResult>(
                                     context,
