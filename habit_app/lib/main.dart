@@ -1594,6 +1594,193 @@ class _DescriptionEditDialogState extends State<_DescriptionEditDialog> {
   }
 }
 
+class _CategoryFilterDialog extends StatefulWidget {
+  final List<Habit> habits;
+  final Set<String> initialSelected;
+  final void Function(Set<String>) onChanged;
+  const _CategoryFilterDialog({
+    required this.habits,
+    required this.initialSelected,
+    required this.onChanged,
+  });
+  @override State<_CategoryFilterDialog> createState() => _CategoryFilterDialogState();
+}
+
+class _CategoryFilterDialogState extends State<_CategoryFilterDialog> {
+  final _scrollCtrl = ScrollController();
+  late Set<String> _selected;
+  static const double _rowHeight = 56.0;
+  static const int _maxVisible = 5;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set.from(widget.initialSelected);
+  }
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  List<String> get _categoriesInUse {
+    final seen = <String>{};
+    final ordered = <String>[];
+    for (final h in widget.habits) {
+      final c = h.category.trim();
+      if (c.isEmpty) continue;
+      final key = c.toLowerCase();
+      if (seen.add(key)) ordered.add(c);
+    }
+    return ordered;
+  }
+
+  void _toggle(String category) {
+    setState(() {
+      if (_selected.contains(category)) {
+        _selected.remove(category);
+      } else {
+        _selected.add(category);
+      }
+    });
+    widget.onChanged(Set.from(_selected));
+  }
+
+  Widget _circle(bool selected) => Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2),
+          color: selected ? Colors.white : Colors.transparent,
+        ),
+      );
+
+  Widget _buildRow(String category) {
+    final selected = _selected.contains(category);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _toggle(category),
+      child: SizedBox(
+        height: _rowHeight,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  category.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              _circle(selected),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = _categoriesInUse;
+    final bool isEmpty = categories.isEmpty;
+    final bool needsScroll = categories.length > _maxVisible;
+    final double listHeight = isEmpty
+        ? _rowHeight
+        : (needsScroll ? _rowHeight * _maxVisible : _rowHeight * categories.length);
+
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: Center(
+                child: Text(
+                  'SELECT CATEGORY',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            SizedBox(
+              height: listHeight,
+              child: isEmpty
+                  ? const Center(
+                      child: Text(
+                        'NO CATEGORIES AVAILABLE',
+                        style: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    )
+                  : ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(
+                        scrollbars: false,
+                      ),
+                      child: ListView.builder(
+                        controller: _scrollCtrl,
+                        physics: needsScroll
+                            ? const ClampingScrollPhysics()
+                            : const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        itemCount: categories.length,
+                        itemExtent: _rowHeight,
+                        itemBuilder: (ctx, i) => _buildRow(categories[i]),
+                      ),
+                    ),
+            ),
+            Container(height: 0.5, color: Colors.white24),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: const Center(
+                  child: Text(
+                    'CLOSE',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CategorySelectDialog extends StatefulWidget {
   final void Function(String) onSelected;
   final List<Habit> habits;
@@ -7899,9 +8086,16 @@ class _HabitHomePageState extends State<HabitHomePage> {
   List<Habit> _forDay(DateTime d) => _all.where((h) => _isScheduledOn(h, d)).toList();
 
   List<Habit> _applySearchFilter(List<Habit> source) {
-    if (_searchQuery.trim().isEmpty) return source;
-    final q = _searchQuery.trim().toLowerCase();
-    return source.where((h) => h.title.toLowerCase().startsWith(q)).toList();
+    Iterable<Habit> result = source;
+    if (_selectedCategories.isNotEmpty) {
+      final sel = _selectedCategories.map((c) => c.trim().toLowerCase()).toSet();
+      result = result.where((h) => sel.contains(h.category.trim().toLowerCase()));
+    }
+    if (_searchQuery.trim().isNotEmpty) {
+      final q = _searchQuery.trim().toLowerCase();
+      result = result.where((h) => h.title.toLowerCase().startsWith(q));
+    }
+    return result.toList();
   }
 
   double _progress(DateTime day){
@@ -8140,7 +8334,21 @@ class _HabitHomePageState extends State<HabitHomePage> {
           margin:const EdgeInsets.fromLTRB(0,0,0,12),
           decoration:BoxDecoration(color:Colors.white,borderRadius:BorderRadius.circular(12),border:Border.all(color:Colors.black,width:1)),
           child:Column(children:[
-            Padding(padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text('SELECT A CATEGORY',style:TextStyle(color:Colors.black,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                showDialog(
+                  context: context,
+                  barrierColor: Colors.black54,
+                  builder: (_) => _CategoryFilterDialog(
+                    habits: _all,
+                    initialSelected: _selectedCategories,
+                    onChanged: (sel) => setState(() => _selectedCategories = sel),
+                  ),
+                );
+              },
+              child: Container(width: double.infinity, padding:const EdgeInsets.symmetric(vertical:14),child:Center(child:Text(_categoryPanelLabel(),style:TextStyle(color:Colors.black,fontSize:22,fontWeight:FontWeight.w800,letterSpacing:0.5)))),
+            ),
             Container(height:1,color:Colors.black),
             Row(children:[
   const Padding(padding:EdgeInsets.symmetric(horizontal:14,vertical:14),child:Icon(Icons.search,color:Colors.black,size:20)),
@@ -8230,12 +8438,20 @@ class _HabitHomePageState extends State<HabitHomePage> {
   }
 
   String _searchQuery = '';
+  String _categoryPanelLabel() {
+    final count = _selectedCategories.length;
+    if (count == 0) return 'SELECT A CATEGORY';
+    if (count == 1) return '1 CATEGORY SELECTED';
+    return '$count CATEGORIES SELECTED';
+  }
   final TextEditingController _searchCtrl = TextEditingController();
+  Set<String> _selectedCategories = {};
 
   void _clearSearch() {
     setState(() {
       _searchCtrl.clear();
       _searchQuery = '';
+      _selectedCategories = {};
     });
   }
 
