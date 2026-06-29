@@ -1380,9 +1380,12 @@ class _AddNoteDialog extends StatefulWidget {
   const _AddNoteDialog({required this.initialNote, required this.onConfirm});
   @override State<_AddNoteDialog> createState() => _AddNoteDialogState();
 }
+
 class _AddNoteDialogState extends State<_AddNoteDialog> {
   late TextEditingController _ctrl;
-  @override void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialNote); }
+  static const int _maxChars = 400;
+  int _charCount = 0;
+  @override void initState() { super.initState(); _ctrl = TextEditingController(text: widget.initialNote); _charCount = _ctrl.text.length; }
   @override void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
@@ -1404,22 +1407,38 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: Colors.white24, width: 1),
             ),
-            child: TextField(
-              controller: _ctrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.characters,
-              onChanged: (v) {
-                final u = v.toUpperCase();
-                if (v != u) {
-                  _ctrl.value = TextEditingValue(text: u, selection: TextSelection.collapsed(offset: u.length));
-                }
-              },
-              maxLines: 5,
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(12),
-              ),
+            child: Stack(
+              children: [
+                TextField(
+                  controller: _ctrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  onChanged: (v) {
+                    var u = v.toUpperCase();
+                    if (u.length > _maxChars) {
+                      u = u.substring(0, _maxChars);
+                    }
+                    if (v != u) {
+                      _ctrl.value = TextEditingValue(text: u, selection: TextSelection.collapsed(offset: u.length));
+                    }
+                    setState(() => _charCount = u.length);
+                  },
+                  maxLines: 5,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.fromLTRB(12, 28, 12, 12),
+                  ),
+                ),
+                Positioned(
+                  top: 6,
+                  right: 8,
+                  child: Text(
+                    '$_charCount/$_maxChars',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1433,7 +1452,11 @@ class _AddNoteDialogState extends State<_AddNoteDialog> {
           Container(width: 0.5, color: Colors.white24),
           Expanded(child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () { widget.onConfirm(_ctrl.text.trim()); Navigator.pop(context); },
+            onTap: () {
+              if (_ctrl.text.length > _maxChars) { return; }
+              widget.onConfirm(_ctrl.text.trim());
+              Navigator.pop(context);
+            },
             child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), child: const Center(child: Text('OK', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))),
           )),
         ])),
@@ -4295,7 +4318,14 @@ class _HabitBottomSheetState extends State<_HabitBottomSheet> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: hasNote
-                    ? Text(_note.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3))
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('NOTE', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+                          const SizedBox(height: 4),
+                          Text(_note.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
+                        ],
+                      )
                     : const Text('ADD NOTE...', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3)),
               ),
             ),
@@ -8209,6 +8239,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
     final today=DateTime(now.year,now.month,now.day);
     final isToday=_sel.year==today.year&&_sel.month==today.month&&_sel.day==today.day;
     if(isToday){
+      if(mounted)setState((){_searchOpen=false;_searchQuery='';_selectedCategories={};_searchCtrl.clear();});
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:today.toIso8601String())));
       if(res!=null&&mounted){
         _addFromResult(res);
@@ -8216,6 +8247,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
     }else{
       final pickedDate=await showDialog<DateTime>(context:context,barrierColor:Colors.black.withValues(alpha:0.75),barrierDismissible:true,builder:(_)=>_StartDatePickerModal(selectedDate:_sel));
       if(pickedDate==null||!mounted)return;
+      if(mounted)setState((){_searchOpen=false;_searchQuery='';_selectedCategories={};_searchCtrl.clear();});
       final res=await Navigator.push<dynamic>(context,MaterialPageRoute(builder:(_)=>CategorySelectionScreen(habitTitle:'',startDate:pickedDate.toIso8601String())));
       if(res!=null&&mounted){
         _addFromResult(res);
