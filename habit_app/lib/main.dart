@@ -5622,6 +5622,7 @@ class _HabitAnimatedList extends StatefulWidget {
 }
 
 class _HabitAnimatedListState extends State<_HabitAnimatedList> {
+  static const double _editRevealWidth = 90.0;
   final _key=GlobalKey<AnimatedListState>();
   late List<Habit> _cur;
   static const _dur=Duration(milliseconds:400);
@@ -5677,22 +5678,42 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
     final time=widget.earliestReminderTime(habit);
     final state=habit.stateOn(widget.selectedDay);
     final hasReminders = habit.reminders.isNotEmpty;
-    return Dismissible(
-      key:Key('d_${habit.id}'),
-      direction:DismissDirection.endToStart,
-      onDismissed:(_)=>widget.onDismiss(habit.id),
-      background:Container(alignment:Alignment.centerRight,padding:const EdgeInsets.only(right:20),color:Colors.red.withValues(alpha:0.2),child:const Text('DELETE',style:TextStyle(color:Colors.red,fontSize:11,letterSpacing:2,fontWeight:FontWeight.w700))),
-      child:GestureDetector(
-        onTap:()=>widget.onTap(habit.id),
-        onLongPress:()=>widget.onLongPress(habit.id),
-        child:Container(padding:const EdgeInsets.symmetric(vertical:16),decoration:const BoxDecoration(border:Border(bottom:BorderSide(color:Colors.white10,width:0.5))),child:Row(children:[
+    return Container(
+      child: Stack(
+        children: [
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: _editRevealWidth,
+            child: Container(
+              alignment: Alignment.centerRight,
+              color: const Color(0xFF3A3A3A),
+              padding: const EdgeInsets.only(right: 28),
+              child: const Align(
+                alignment: Alignment.centerRight,
+                child: Text('EDIT', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 13, letterSpacing: 2, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ),
+          _SwipeEditRow(
+            habit: habit,
+            allHabits: widget.onLongPress == null ? const [] : [],
+            maxReveal: _editRevealWidth,
+            child: GestureDetector(
+              onTap: () => widget.onTap(habit.id),
+              onLongPress: () => widget.onLongPress(habit.id),
+              child: Container(padding: const EdgeInsets.symmetric(vertical: 16), decoration: const BoxDecoration(color: Colors.black, border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5))), child: Row(children: [
           Text(habit.title.toUpperCase(),style:const TextStyle(color:Colors.white,fontSize:16,fontWeight:FontWeight.w800,letterSpacing:0.3)),
           if(habit.priority>1)...[const SizedBox(width:6),Text('${habit.priority}',style:const TextStyle(color:Colors.white,fontSize:14,fontWeight:FontWeight.w700)),const SizedBox(width:2),const Icon(Icons.flag,color:Colors.white,size:14)],
           if(icon!=null)...[const SizedBox(width:6),icon,if(time!=null)...[const SizedBox(width:4),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))]],
           if(icon==null&&time!=null)...[const SizedBox(width:6),Text(time,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w600))],
           const Spacer(),
+          const SizedBox(width: 16),
           widget.buildStatusIcon(state, hasReminders),
         ])),
+      ),
+      )],
       ),
     );
   }
@@ -5711,6 +5732,95 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
       padding:const EdgeInsets.symmetric(horizontal:20,vertical:8),
       initialItemCount:_cur.length,
       itemBuilder:(ctx,i,anim)=>_animated(_cur[i],anim),
+    );
+  }
+}
+
+class _SwipeEditRow extends StatefulWidget {
+  final Habit habit;
+  final List<Habit> allHabits;
+  final Widget child;
+  final double maxReveal;
+  const _SwipeEditRow({required this.habit, required this.allHabits, required this.child, this.maxReveal = 90.0});
+  @override State<_SwipeEditRow> createState() => _SwipeEditRowState();
+}
+
+class _SwipeEditRowState extends State<_SwipeEditRow> with SingleTickerProviderStateMixin {
+  double get _maxReveal => widget.maxReveal;
+  double _dragX = 0;
+  bool _navigated = false;
+  late AnimationController _animCtrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(double target) {
+    _anim = Tween<double>(begin: _dragX, end: target).animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut))
+      ..addListener(() => setState(() => _dragX = _anim.value));
+    _animCtrl.forward(from: 0).whenComplete(() {
+      if (target <= -_maxReveal && _dragX <= -_maxReveal) {
+        _triggerAutoNavigate();
+      }
+    });
+  }
+
+  void _triggerAutoNavigate() {
+    if (_navigated) return;
+    _navigated = true;
+    _openEdit();
+  }
+
+  void _openEdit() {
+    Navigator.of(context, rootNavigator: true).push(
+      MaterialPageRoute(
+        builder: (_) => EditHabitScreen(
+          habit: widget.habit,
+          allHabits: widget.allHabits,
+          onDelete: () {},
+        ),
+      ),
+    ).then((_) {
+      if (mounted) {
+        _navigated = false;
+        _animateTo(0);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      
+      onHorizontalDragEnd: (details) {
+        if (_dragX <= -_maxReveal / 2) {
+          _animateTo(-_maxReveal);
+        } else {
+          _animateTo(0);
+        }
+      },
+      onHorizontalDragUpdate: (details) {
+        setState(() {
+          _dragX = (_dragX + details.delta.dx).clamp(-_maxReveal, 0.0);
+        });
+        if (_dragX <= -_maxReveal) {
+          _triggerAutoNavigate();
+        }
+      },
+      onTap: _dragX != 0 ? () => _animateTo(0) : null,
+      child: Transform.translate(
+        offset: Offset(_dragX, 0),
+        child: widget.child,
+      ),
     );
   }
 }
