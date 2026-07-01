@@ -5711,6 +5711,7 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
           const Spacer(),
           const SizedBox(width: 16),
           widget.buildStatusIcon(state, hasReminders),
+          const SizedBox(width: 18),
         ])),
       ),
       )],
