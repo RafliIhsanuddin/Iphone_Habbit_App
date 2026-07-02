@@ -7782,36 +7782,25 @@ class _HelpDialogState extends State<_HelpDialog>
                             Positioned(
                               right: 0,
                               child: _page == 0
-                                  ? ScaleTransition(
-                                      scale: _scaleAnim,
-                                      child: AnimatedSwitcher(
+                                  ? AnimatedSwitcher(
                                         duration: const Duration(milliseconds: 200),
                                         transitionBuilder: (child, anim) => ScaleTransition(
                                           scale: anim,
                                           child: FadeTransition(opacity: anim, child: child),
                                         ),
-                                        child: _page0CircleChecked
-                                            ? Container(
-                                                key: const ValueKey('page0_done'),
-                                                width: 26,
-                                                height: 26,
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: Colors.white,
-                                                ),
-                                                child: CustomPaint(painter: _BoldCheckPainter()),
-                                              )
-                                            : Container(
-                                          key: const ValueKey('page0_empty'),
+                                        child: Container(
+                                          key: ValueKey('page0_${_page0CircleChecked ? 'done' : 'empty'}'),
                                           width: 26,
                                           height: 26,
                                           decoration: const BoxDecoration(
                                             shape: BoxShape.circle,
                                             color: Colors.white,
                                           ),
+                                          child: _page0CircleChecked
+                                              ? CustomPaint(painter: _BoldCheckPainter())
+                                              : null,
                                         ),
-                                      ),
-                                    )
+                                      )
                                   : Container(
                                       width: 26,
                                       height: 26,
