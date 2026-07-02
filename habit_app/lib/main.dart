@@ -7437,6 +7437,12 @@ class _HelpDialogState extends State<_HelpDialog>
   late AnimationController _holdCircleCtrl;
   late Animation<double> _holdCircleAnim;
 
+  late AnimationController _swipeCursorCtrl;
+  late Animation<double> _swipeCursorAnim;
+
+  late AnimationController _swipeRowCtrl;
+  late Animation<double> _swipeRowAnim;
+
   @override
   void initState() {
     super.initState();
@@ -7483,8 +7489,25 @@ class _HelpDialogState extends State<_HelpDialog>
       CurvedAnimation(parent: _holdCircleCtrl, curve: Curves.easeInOut),
     );
 
+    _swipeCursorCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _swipeCursorAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _swipeCursorCtrl, curve: Curves.easeInOut),
+    );
+
+    _swipeRowCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _swipeRowAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _swipeRowCtrl, curve: Curves.easeInOut),
+    );
+
     _runCycle();
     _runHoldCycle();
+    _runSwipeCycle();
   }
 
   Future<void> _runCycle() async {
@@ -7559,6 +7582,47 @@ class _HelpDialogState extends State<_HelpDialog>
     }
   }
 
+  Future<void> _runSwipeCycle() async {
+    while (mounted) {
+      if (_page != 2) {
+        await Future.delayed(const Duration(milliseconds: 200));
+        continue;
+      }
+      // Step 1: pause at rest position
+      await Future.delayed(const Duration(milliseconds: 600));
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 2: cursor fades in
+      await _swipeCursorCtrl.forward(from: 0).orCancel.catchError((_) {});
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 3: row swipes left
+      await _swipeRowCtrl.forward(from: 0).orCancel.catchError((_) {});
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 4: pause briefly while revealed
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 5: row swipes back
+      await _swipeRowCtrl.reverse().orCancel.catchError((_) {});
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 6: cursor fades out
+      await _swipeCursorCtrl.reverse().orCancel.catchError((_) {});
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 7: pause before next cycle
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
 
 
   @override
@@ -7568,9 +7632,86 @@ class _HelpDialogState extends State<_HelpDialog>
     _circleCtrl.dispose();
     _holdPressCtrl.dispose();
     _holdCircleCtrl.dispose();
+    _swipeCursorCtrl.dispose();
+    _swipeRowCtrl.dispose();
     super.dispose();
   }
 
+  Widget _buildSwipeEditDemo() {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Transform.translate(
+          offset: Offset(_swipeRowAnim.value * -90, 0),
+          child: Container(
+            height: 40,
+            decoration: const BoxDecoration(color: Colors.black),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 90,
+                  child: Container(
+                    alignment: Alignment.centerRight,
+                    color: const Color(0xFF3A3A3A),
+                    padding: const EdgeInsets.only(right: 28),
+                    child: const Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        'EDIT',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    const Text(
+                      'EXAMPLE HABIT',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white,
+                      ),
+                      child: CustomPaint(painter: _BoldCheckPainter()),
+                    ),
+                    const SizedBox(width: 18),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        FadeTransition(
+          opacity: _swipeCursorAnim,
+          child: Positioned(
+            child: Transform.rotate(
+              angle: -0.87,
+              child: const _MouseCursor(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -7613,135 +7754,151 @@ class _HelpDialogState extends State<_HelpDialog>
                   ),
                   const Spacer(),
                   Expanded(
-                    child: SizedBox(
-                      height: 40,
-                      child: Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          // Status indicator — fixed on the right
-                          Positioned(
-                            right: 0,
-                            child: ScaleTransition(
-                              scale: _scaleAnim,
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 200),
-                                transitionBuilder: (child, anim) => ScaleTransition(
-                                  scale: anim,
-                                  child: FadeTransition(opacity: anim, child: child),
-                                ),
-                                child: _isDone
-                                    ? Container(
-                                        key: const ValueKey('done'),
-                                        width: 26,
-                                        height: 26,
-                                        decoration: const BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.white,
-                                        ),
-                                        child: CustomPaint(painter: _BoldCheckPainter()),
-                                      )
-                                    : Container(
-                                  key: const ValueKey('empty'),
-                                  width: 26,
-                                  height: 26,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_page == 0)
-                          // Click-flash circle — positioned behind the cursor
-                          Positioned(
-                            right: 120,
-                            top: 2.8,
-                            child: AnimatedBuilder(
-                              animation: _circleAnim,
-                              builder: (_, __) {
-                                final v = _circleAnim.value;
-                                final flashOpacity = (1.0 - v).clamp(0.0, 1.0) * (v > 0 ? 1.0 : 0.0);
-                                final baseOpacity = 1.0;
-                                return Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white24.withValues(
-                                      alpha: (0.15 * baseOpacity) + (0.45 * flashOpacity),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                          if (_page == 1)
-                          // Hold circle — grows and lingers behind the cursor while pressed.
-                          // Outer box is fixed at the maximum size and centered, so the
-                          // circle's center point never moves as it scales.
-                          Positioned(
-                            right: 120 - 5,
-                            top: 2.8 - 5,
-                            child: SizedBox(
-                              width: 46,
-                              height: 46,
-                              child: Center(
-                                child: AnimatedBuilder(
-                                  animation: _holdPressAnim,
-                                  builder: (_, __) {
-                                    final v = _holdPressAnim.value;
-                                    return Container(
-                                      width: 36 + (10 * v),
-                                      height: 36 + (10 * v),
-                                      decoration: BoxDecoration(
+                    child: _page == 2
+                          ? _buildSwipeEditDemo()
+                          : SizedBox(
+                        height: 40,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          alignment: Alignment.center,
+                          children: [
+                            // Status indicator — fixed on the right
+                            Positioned(
+                              right: 0,
+                              child: _page == 1 || _page == 2
+                                  ? Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: const BoxDecoration(
                                         shape: BoxShape.circle,
-                                        color: Colors.white24.withValues(
-                                          alpha: 0.15 + (0.35 * v),
+                                        color: Colors.white,
+                                      ),
+                                      child: CustomPaint(painter: _BoldCheckPainter()),
+                                    )
+                                  : ScaleTransition(
+                                      scale: _scaleAnim,
+                                      child: AnimatedSwitcher(
+                                        duration: const Duration(milliseconds: 200),
+                                        transitionBuilder: (child, anim) => ScaleTransition(
+                                          scale: anim,
+                                          child: FadeTransition(opacity: anim, child: child),
+                                        ),
+                                        child: _isDone
+                                            ? Container(
+                                                key: const ValueKey('done'),
+                                                width: 26,
+                                                height: 26,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: Colors.white,
+                                                ),
+                                                child: CustomPaint(painter: _BoldCheckPainter()),
+                                              )
+                                            : Container(
+                                          key: const ValueKey('empty'),
+                                          width: 26,
+                                          height: 26,
+                                          decoration: const BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.white,
+                                          ),
                                         ),
                                       ),
-                                    );
-                                  },
+                                    ),
+                            ),
+                            if (_page == 0)
+                            // Click-flash circle — positioned behind the cursor
+                            Positioned(
+                              right: 120,
+                              top: 2.8,
+                              child: AnimatedBuilder(
+                                animation: _circleAnim,
+                                builder: (_, __) {
+                                  final v = _circleAnim.value;
+                                  final flashOpacity = (1.0 - v).clamp(0.0, 1.0) * (v > 0 ? 1.0 : 0.0);
+                                  final baseOpacity = 1.0;
+                                  return Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white24.withValues(
+                                        alpha: (0.15 * baseOpacity) + (0.45 * flashOpacity),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            if (_page == 1)
+                            // Hold circle — grows and lingers behind the cursor while pressed.
+                            // Outer box is fixed at the maximum size and centered, so the
+                            // circle's center point never moves as it scales.
+                            Positioned(
+                              right: 120 - 5,
+                              top: 2.8 - 5,
+                              child: SizedBox(
+                                width: 46,
+                                height: 46,
+                                child: Center(
+                                  child: AnimatedBuilder(
+                                    animation: _holdPressAnim,
+                                    builder: (_, __) {
+                                      final v = _holdPressAnim.value;
+                                      return Container(
+                                        width: 36 + (10 * v),
+                                        height: 36 + (10 * v),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.white24.withValues(
+                                            alpha: 0.15 + (0.35 * v),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          // Cursor — centered in gap between title and status
-                          Positioned( 
-                            right: 135,
-                            top: 20,
-                            child: AnimatedBuilder(
-                              animation: _page == 1 ? _holdPressAnim : _animCtrl,
-                              builder: (_, child) {
-                                final scale = _page == 1
-                                    ? 1.0 - (0.12 * _holdPressAnim.value)
-                                    : (_animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0);
-                                return Transform.scale(
-                                  scale: scale,
-                                  alignment: const Alignment(1.0, 0.0),
-                                  child: child,
-                                );
-                              },
-                              child: Transform.rotate(
-                                angle: -0.87,
-                                child: const _MouseCursor(),
+                            // Cursor — centered in gap between title and status
+                            Positioned( 
+                              right: 135,
+                              top: 20,
+                              child: AnimatedBuilder(
+                                animation: _page == 1 ? _holdPressAnim : _animCtrl,
+                                builder: (_, child) {
+                                  final scale = _page == 1
+                                      ? 1.0 - (0.12 * _holdPressAnim.value)
+                                      : (_animCtrl.isAnimating ? (0.92 + 0.08 * (1.0 - _animCtrl.value)) : 1.0);
+                                  return Transform.scale(
+                                    scale: scale,
+                                    alignment: const Alignment(1.0, 0.0),
+                                    child: child,
+                                  );
+                                },
+                                child: Transform.rotate(
+                                  angle: -0.87,
+                                  child: const _MouseCursor(),
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
                   ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Text(
-                _page == 0
-                    ? 'Click on any item in the to-do list to mark it as complete or to update its state.'
-                    : 'Long click on any item in the list to access reminders, notes, statistics and more options.',
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: Text(
+                  _page == 0
+                      ? 'Click on any item in the to-do list to mark it as complete or to update its state.'
+                      : _page == 1
+                      ? 'Long click on any item in the list to access reminders, notes, statistics and more options.'
+                      : _page == 2
+                      ? 'Swipe left to edit the activity'
+                      : 'Swipe left to edit the activity',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: Colors.white,
@@ -7765,58 +7922,58 @@ class _HelpDialogState extends State<_HelpDialog>
                         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
                       ),
                       onPressed: () {
-                        if (_page == 0) {
-                          Navigator.pop(context);
-                        } else {
-                          setState(() => _page = 0);
-                        }
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 18),
-                        child: Text(
-                          'BACK',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                    if (_page == 0) {
+                      Navigator.pop(context);
+                    } else {
+                      setState(() => _page = _page - 1);
+                    }
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 18),
+                    child: Text(
+                      'BACK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
-                  Container(width: 0.5, color: Colors.white24),
-                  Expanded(
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        overlayColor: Colors.transparent,
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        splashFactory: NoSplash.splashFactory,
-                      ).copyWith(
-                        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-                      ),
-                      onPressed: () {
-                        if (_page == 0) {
-                          setState(() => _page = 1);
-                        } else {
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        child: Text(
-                          _page == 0 ? 'NEXT' : 'Got it!',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
+                ),
+              ),
+              Container(width: 0.5, color: Colors.white24),
+              Expanded(
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    overlayColor: Colors.transparent,
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    splashFactory: NoSplash.splashFactory,
+                  ).copyWith(
+                    overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                  ),
+                  onPressed: () {
+                    if (_page < 3) {
+                      setState(() => _page = _page + 1);
+                    } else {
+                      Navigator.pop(context);
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    child: Text(
+                      _page < 3 ? 'NEXT' : 'Got it!',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ),
+                ),
+              ),
                 ],
               ),
             ),
