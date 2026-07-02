@@ -7443,9 +7443,20 @@ class _HelpDialogState extends State<_HelpDialog>
   late AnimationController _swipeRowCtrl;
   late Animation<double> _swipeRowAnim;
 
+  bool _page0CircleChecked = false;
+  bool _page1CircleChecked = true;
+  bool _page2CircleChecked = true;
+
+  void _resetPage0State() {
+    _page0CircleChecked = false;
+    _isDone = false;
+  }
+
   @override
   void initState() {
     super.initState();
+
+    _resetPage0State();
 
     _animCtrl = AnimationController(
       vsync: this,
@@ -7454,7 +7465,6 @@ class _HelpDialogState extends State<_HelpDialog>
     _scaleAnim = Tween<double>(begin: 0.75, end: 1.0).animate(
       CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
     );
-
     _cursorCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -7528,7 +7538,10 @@ class _HelpDialogState extends State<_HelpDialog>
 
       // Step 3: tap — ripple + toggle state + scale pop
       _circleCtrl.forward(from: 0);
-      setState(() => _isDone = !_isDone);
+      setState(() {
+        _page0CircleChecked = true;
+        _isDone = true;
+      });
       _animCtrl.forward(from: 0);
 
       // Step 4: pause briefly while "tapped"
@@ -7540,8 +7553,11 @@ class _HelpDialogState extends State<_HelpDialog>
       await _cursorCtrl.reverse().orCancel.catchError((_) {});
       if (!mounted) return;
 
-      // Step 6: pause before next tap
+      // Step 6: reset state and pause before next tap
       await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
+      if (_page != 0) continue;
+      setState(() => _resetPage0State());
     }
   }
 
@@ -7765,17 +7781,8 @@ class _HelpDialogState extends State<_HelpDialog>
                             // Status indicator — fixed on the right
                             Positioned(
                               right: 0,
-                              child: _page == 1 || _page == 2
-                                  ? Container(
-                                      width: 26,
-                                      height: 26,
-                                      decoration: const BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.white,
-                                      ),
-                                      child: CustomPaint(painter: _BoldCheckPainter()),
-                                    )
-                                  : ScaleTransition(
+                              child: _page == 0
+                                  ? ScaleTransition(
                                       scale: _scaleAnim,
                                       child: AnimatedSwitcher(
                                         duration: const Duration(milliseconds: 200),
@@ -7783,9 +7790,9 @@ class _HelpDialogState extends State<_HelpDialog>
                                           scale: anim,
                                           child: FadeTransition(opacity: anim, child: child),
                                         ),
-                                        child: _isDone
+                                        child: _page0CircleChecked
                                             ? Container(
-                                                key: const ValueKey('done'),
+                                                key: const ValueKey('page0_done'),
                                                 width: 26,
                                                 height: 26,
                                                 decoration: const BoxDecoration(
@@ -7795,7 +7802,7 @@ class _HelpDialogState extends State<_HelpDialog>
                                                 child: CustomPaint(painter: _BoldCheckPainter()),
                                               )
                                             : Container(
-                                          key: const ValueKey('empty'),
+                                          key: const ValueKey('page0_empty'),
                                           width: 26,
                                           height: 26,
                                           decoration: const BoxDecoration(
@@ -7803,6 +7810,17 @@ class _HelpDialogState extends State<_HelpDialog>
                                             color: Colors.white,
                                           ),
                                         ),
+                                      ),
+                                    )
+                                  : Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: const BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Colors.white,
+                                      ),
+                                      child: CustomPaint(
+                                        painter: _BoldCheckPainter(),
                                       ),
                                     ),
                             ),
@@ -7925,7 +7943,16 @@ class _HelpDialogState extends State<_HelpDialog>
                     if (_page == 0) {
                       Navigator.pop(context);
                     } else {
-                      setState(() => _page = _page - 1);
+                      setState(() {
+                        _page = _page - 1;
+                        if (_page == 0) {
+                          _resetPage0State();
+                        } else if (_page == 1) {
+                          _page1CircleChecked = true;
+                        } else if (_page == 2) {
+                          _page2CircleChecked = true;
+                        }
+                      });
                     }
                   },
                   child: const Padding(
@@ -7955,7 +7982,14 @@ class _HelpDialogState extends State<_HelpDialog>
                   ),
                   onPressed: () {
                     if (_page < 3) {
-                      setState(() => _page = _page + 1);
+                      setState(() {
+                        _page = _page + 1;
+                        if (_page == 1) {
+                          _page1CircleChecked = true;
+                        } else if (_page == 2) {
+                          _page2CircleChecked = true;
+                        }
+                      });
                     } else {
                       Navigator.pop(context);
                     }
@@ -8747,6 +8781,11 @@ class _HabitHomePageState extends State<HabitHomePage> {
   final TextEditingController _searchCtrl = TextEditingController();
   Set<String> _selectedCategories = {};
 
+
+
+
+
+
   void _clearSearch() {
     setState(() {
       _searchCtrl.clear();
@@ -8754,6 +8793,10 @@ class _HabitHomePageState extends State<HabitHomePage> {
       _selectedCategories = {};
     });
   }
+
+
+  
+  
 
   @override
   void dispose() {
