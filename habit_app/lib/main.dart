@@ -7418,8 +7418,12 @@ class _HelpDialog extends StatefulWidget {
 }
 
 const double tutorialHabitVerticalOffset = 8.0;
-const double tutorialInstructionVerticalOffset = 13.0;
+const double tutorialInstructionVerticalOffset = 10.0;
 const double tutorialBlackBackgroundHeightOffset = -4.0;
+const double tutorialHabitOuterTopPadding = 6.0;
+const double tutorialHabitOuterBottomPadding = 6.0;
+const double tutorialDescriptionTopPadding = 10.0;
+const double tutorialDescriptionBottomPadding = 10.0;
 
 class _HelpDialogState extends State<_HelpDialog>
     with TickerProviderStateMixin {
@@ -7768,6 +7772,7 @@ void _resetAllStates() {
               ),
             ),
             Container(height: 0.5, color: Colors.white24),
+            SizedBox(height: tutorialHabitOuterTopPadding),
             Transform.translate(
               offset: const Offset(0, tutorialHabitVerticalOffset),
               child: Container(
@@ -7920,6 +7925,8 @@ void _resetAllStates() {
               ),
             ),
             ),
+            SizedBox(height: tutorialHabitOuterBottomPadding),
+            SizedBox(height: tutorialDescriptionTopPadding),
             Transform.translate(
               offset: const Offset(0, tutorialInstructionVerticalOffset),
               child: Padding(
@@ -7939,6 +7946,7 @@ void _resetAllStates() {
               ),
               ),
             ),
+            SizedBox(height: tutorialDescriptionBottomPadding),
             Container(height: 0.5, color: Colors.white24),
             IntrinsicHeight(
               child: Row(
