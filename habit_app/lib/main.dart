@@ -7444,13 +7444,20 @@ class _HelpDialogState extends State<_HelpDialog>
   late Animation<double> _swipeRowAnim;
 
   bool _page0CircleChecked = false;
-  bool _page1CircleChecked = true;
-  bool _page2CircleChecked = true;
+bool _page1CircleChecked = true;
+bool _page2CircleChecked = true;
 
-  void _resetPage0State() {
-    _page0CircleChecked = false;
-    _isDone = false;
-  }
+void _resetPage0State() {
+  _page0CircleChecked = false;
+  _isDone = false;
+}
+
+void _resetAllStates() {
+  _page0CircleChecked = false;
+  _page1CircleChecked = true;
+  _page2CircleChecked = true;
+  _isDone = false;
+}
 
   @override
   void initState() {
@@ -7716,15 +7723,14 @@ class _HelpDialogState extends State<_HelpDialog>
             ),
           ),
         ),
-        FadeTransition(
-          opacity: _swipeCursorAnim,
-          child: Positioned(
+        if (_swipeCursorAnim.value > 0)
+          FadeTransition(
+            opacity: _swipeCursorAnim,
             child: Transform.rotate(
               angle: -0.87,
               child: const _MouseCursor(),
             ),
           ),
-        ),
       ],
     );
   }
@@ -7903,8 +7909,6 @@ class _HelpDialogState extends State<_HelpDialog>
                       ? 'Click on any item in the to-do list to mark it as complete or to update its state.'
                       : _page == 1
                       ? 'Long click on any item in the list to access reminders, notes, statistics and more options.'
-                      : _page == 2
-                      ? 'Swipe left to edit the activity'
                       : 'Swipe left to edit the activity',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -7938,8 +7942,6 @@ class _HelpDialogState extends State<_HelpDialog>
                           _resetPage0State();
                         } else if (_page == 1) {
                           _page1CircleChecked = true;
-                        } else if (_page == 2) {
-                          _page2CircleChecked = true;
                         }
                       });
                     }
@@ -7970,7 +7972,7 @@ class _HelpDialogState extends State<_HelpDialog>
                     overlayColor: const WidgetStatePropertyAll(Colors.transparent),
                   ),
                   onPressed: () {
-                    if (_page < 3) {
+                    if (_page < 2) {
                       setState(() {
                         _page = _page + 1;
                         if (_page == 1) {
@@ -7986,7 +7988,7 @@ class _HelpDialogState extends State<_HelpDialog>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     child: Text(
-                      _page < 3 ? 'NEXT' : 'Got it!',
+                      _page < 2 ? 'NEXT' : 'Got It',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
