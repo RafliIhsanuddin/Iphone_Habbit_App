@@ -7417,8 +7417,12 @@ class _HelpDialog extends StatefulWidget {
   State<_HelpDialog> createState() => _HelpDialogState();
 }
 
+const double tutorialHabitVerticalOffset = 8.0;
+const double tutorialInstructionVerticalOffset = 13.0;
+
 class _HelpDialogState extends State<_HelpDialog>
     with TickerProviderStateMixin {
+      
   bool _isDone = false;
   int _page = 0;
 
@@ -7661,14 +7665,16 @@ void _resetAllStates() {
   }
 
   Widget _buildSwipeEditDemo() {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Transform.translate(
-          offset: Offset(_swipeRowAnim.value * -90, 0),
-          child: Container(
-            height: 40,
-            decoration: const BoxDecoration(color: Colors.black),
+    return Container(
+      color: Colors.black,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Transform.translate(
+            offset: Offset(_swipeRowAnim.value * -90, 0),
+            child: Container(
+              height: 40,
+              decoration: const BoxDecoration(color: Colors.black),
             child: Stack(
               children: [
                 Positioned(
@@ -7732,7 +7738,7 @@ void _resetAllStates() {
             ),
           ),
       ],
-    );
+    ));
   }
 
   @override
@@ -7761,7 +7767,12 @@ void _resetAllStates() {
               ),
             ),
             Container(height: 0.5, color: Colors.white24),
-            Padding(
+            Transform.translate(
+              offset: const Offset(0, tutorialHabitVerticalOffset),
+              child: Container(
+              width: double.infinity,
+              color: Colors.black,
+              child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               child: Row(
                 children: [
@@ -7778,7 +7789,8 @@ void _resetAllStates() {
                   Expanded(
                     child: _page == 2
                           ? _buildSwipeEditDemo()
-                          : SizedBox(
+                          : Container(
+                        color: Colors.black,
                         height: 40,
                         child: Stack(
                           clipBehavior: Clip.none,
@@ -7901,8 +7913,12 @@ void _resetAllStates() {
                   ),
                 ],
               ),
+              ),
             ),
-            Padding(
+            ),
+            Transform.translate(
+              offset: const Offset(0, tutorialInstructionVerticalOffset),
+              child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                 child: Text(
                   _page == 0
@@ -7916,6 +7932,7 @@ void _resetAllStates() {
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
+              ),
               ),
             ),
             Container(height: 0.5, color: Colors.white24),
