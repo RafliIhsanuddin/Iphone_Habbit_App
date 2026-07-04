@@ -7615,6 +7615,8 @@ void _resetAllStates() {
   }
 
   Future<void> _runSwipeCycle() async {
+    return;
+    // ignore: dead_code
     while (mounted) {
       if (_page != 2) {
         await Future.delayed(const Duration(milliseconds: 200));
@@ -7671,6 +7673,7 @@ void _resetAllStates() {
 
   Widget _buildSwipeEditDemo() {
     return Container(
+      width: double.infinity,
       color: Colors.black,
       child: Stack(
         alignment: Alignment.center,
@@ -7678,10 +7681,12 @@ void _resetAllStates() {
           Transform.translate(
             offset: Offset(_swipeRowAnim.value * -90, 0),
             child: Container(
+              width: double.infinity,
               height: 40,
               decoration: const BoxDecoration(color: Colors.black),
             child: Stack(
               children: [
+                if (_swipeRowAnim.value > 0)
                 Positioned(
                   right: 0,
                   top: 0,
@@ -7784,20 +7789,35 @@ void _resetAllStates() {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               child: Row(
                 children: [
-                  const Text(
-                    'EXAMPLE HABIT',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.3,
+                  SizedBox(
+                    width: 140,
+                    child: TextField(
+                      autofocus: false,
+                      showCursor: false,
+                      readOnly: false,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'EXAMPLE HABIT',
+                        hintStyle: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                     ),
                   ),
                   const Spacer(),
                   Expanded(
-                    child: _page == 2
-                          ? _buildSwipeEditDemo()
-                          : Container(
+                    child: Container(
                         color: Colors.black,
                         height: 40,
                         child: Stack(
@@ -7894,6 +7914,7 @@ void _resetAllStates() {
                               ),
                             ),
                             // Cursor — centered in gap between title and status
+                            if (_page != 2)
                             Positioned( 
                               right: 135,
                               top: 20,
