@@ -7615,45 +7615,25 @@ void _resetAllStates() {
   }
 
   Future<void> _runSwipeCycle() async {
-    return;
-    // ignore: dead_code
     while (mounted) {
       if (_page != 2) {
+        _swipeCursorCtrl.value = 0.0;
         await Future.delayed(const Duration(milliseconds: 200));
         continue;
       }
-      // Step 1: pause at rest position
+      // Step 1: pause at rest position, cursor hidden
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
       if (_page != 2) continue;
 
-      // Step 2: cursor fades in
+      // Step 2: cursor fades in smoothly (opacity only)
       await _swipeCursorCtrl.forward(from: 0).orCancel.catchError((_) {});
       if (!mounted) return;
-      if (_page != 2) continue;
 
-      // Step 3: row swipes left
-      await _swipeRowCtrl.forward(from: 0).orCancel.catchError((_) {});
-      if (!mounted) return;
-      if (_page != 2) continue;
-
-      // Step 4: pause briefly while revealed
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (!mounted) return;
-      if (_page != 2) continue;
-
-      // Step 5: row swipes back
-      await _swipeRowCtrl.reverse().orCancel.catchError((_) {});
-      if (!mounted) return;
-      if (_page != 2) continue;
-
-      // Step 6: cursor fades out
-      await _swipeCursorCtrl.reverse().orCancel.catchError((_) {});
-      if (!mounted) return;
-      if (_page != 2) continue;
-
-      // Step 7: pause before next cycle
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Step 3: remain visible, static, until leaving this page
+      while (mounted && _page == 2) {
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
     }
   }
 
@@ -7930,6 +7910,19 @@ void _resetAllStates() {
                                     child: child,
                                   );
                                 },
+                                child: Transform.rotate(
+                                  angle: -0.87,
+                                  child: const _MouseCursor(),
+                                ),
+                              ),
+                            ),
+                            // Cursor for Popup 3 — fade-in only, no scale, no movement
+                            if (_page == 2)
+                            Positioned(
+                              right: 135,
+                              top: 20,
+                              child: FadeTransition(
+                                opacity: _swipeCursorAnim,
                                 child: Transform.rotate(
                                   angle: -0.87,
                                   child: const _MouseCursor(),
