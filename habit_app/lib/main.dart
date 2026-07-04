@@ -7631,9 +7631,14 @@ void _resetAllStates() {
       if (!mounted) return;
 
       // Step 3: remain visible, static, until leaving this page
+      await _swipeRowCtrl.forward(from: 0).orCancel.catchError((_) {});
+      if (!mounted) return;
+
+      // Step 4: remain in swiped position, static, until leaving this page
       while (mounted && _page == 2) {
         await Future.delayed(const Duration(milliseconds: 200));
       }
+      _swipeRowCtrl.value = 0.0;
     }
   }
 
@@ -7651,7 +7656,23 @@ void _resetAllStates() {
     super.dispose();
   }
 
+  double get _editRevealWidth {
+    final tp = TextPainter(
+      text: const TextSpan(
+        text: 'EDIT',
+        style: TextStyle(
+          fontSize: 13,
+          letterSpacing: 2,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return tp.width + 20.0;
+  }
+
   Widget _buildSwipeEditDemo() {
+    final double editWidth = _editRevealWidth;
     return Container(
       width: double.infinity,
       color: Colors.black,
@@ -7659,78 +7680,79 @@ void _resetAllStates() {
         alignment: Alignment.center,
         children: [
           Transform.translate(
-            offset: Offset(_swipeRowAnim.value * -90, 0),
+            offset: Offset(_swipeRowAnim.value * -editWidth, 0),
             child: Container(
               width: double.infinity,
               height: 40,
               decoration: const BoxDecoration(color: Colors.black),
-            child: Stack(
-              children: [
-                if (_swipeRowAnim.value > 0)
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 90,
-                  child: Container(
-                    alignment: Alignment.centerRight,
-                    color: const Color(0xFF3A3A3A),
-                    padding: const EdgeInsets.only(right: 28),
-                    child: const Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        'EDIT',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          letterSpacing: 2,
-                          fontWeight: FontWeight.w700,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (_swipeRowAnim.value > 0)
+                    Positioned(
+                      right: -editWidth,
+                      top: 0,
+                      bottom: 0,
+                      width: editWidth,
+                      child: Container(
+                        color: Colors.black,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            child: const Text(
+                              'EDIT',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
+                  Row(
+                    children: [
+                      const Text(
+                        'EXAMPLE HABIT',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        width: 26,
+                        height: 26,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                        ),
+                        child: CustomPaint(painter: _BoldCheckPainter()),
+                      ),
+                      const SizedBox(width: 18),
+                    ],
                   ),
-                ),
-                Row(
-                  children: [
-                    const Text(
-                      'EXAMPLE HABIT',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                      child: CustomPaint(painter: _BoldCheckPainter()),
-                    ),
-                    const SizedBox(width: 18),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        if (_swipeCursorAnim.value > 0)
-          FadeTransition(
-            opacity: _swipeCursorAnim,
-            child: Transform.rotate(
-              angle: -0.87,
-              child: const _MouseCursor(),
+          if (_swipeCursorAnim.value > 0)
+            FadeTransition(
+              opacity: _swipeCursorAnim,
+              child: Transform.rotate(
+                angle: -0.87,
+                child: const _MouseCursor(),
+              ),
             ),
-          ),
-      ],
-    ));
+        ],
+      ),
+    );
   }
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -7764,7 +7786,44 @@ void _resetAllStates() {
               width: double.infinity,
               height: 80 + tutorialBlackBackgroundHeightOffset,
               color: Colors.black,
-              child: Center(
+              child: Stack(
+              alignment: Alignment.centerRight,
+              children: [
+                if (_page == 2)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: _editRevealWidth,
+                  child: Container(
+                    color: Colors.black,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: const Text(
+                          'EDIT',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            letterSpacing: 2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _swipeRowAnim,
+                  builder: (_, child) {
+                    final double dx = _page == 2 ? -_swipeRowAnim.value * _editRevealWidth : 0.0;
+                    return Transform.translate(
+                      offset: Offset(dx, 0),
+                      child: child,
+                    );
+                  },
+                  child: Center(
               child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               child: Row(
@@ -7936,7 +7995,9 @@ void _resetAllStates() {
                 ],
               ),
               ),
-              ),
+                ),
+              )],
+            ),
             ),
             ),
             SizedBox(height: tutorialHabitOuterBottomPadding),
