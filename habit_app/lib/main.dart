@@ -7618,27 +7618,49 @@ void _resetAllStates() {
     while (mounted) {
       if (_page != 2) {
         _swipeCursorCtrl.value = 0.0;
+        _swipeRowCtrl.value = 0.0;
         await Future.delayed(const Duration(milliseconds: 200));
         continue;
       }
-      // Step 1: pause at rest position, cursor hidden
+      // Step 1: habit fully closed, no cursor — pause at rest position
+      _swipeCursorCtrl.value = 0.0;
+      _swipeRowCtrl.value = 0.0;
       await Future.delayed(const Duration(milliseconds: 600));
       if (!mounted) return;
       if (_page != 2) continue;
 
-      // Step 2: cursor fades in smoothly (opacity only)
+      // Step 2: cursor fades in smoothly at fixed position (opacity only)
       await _swipeCursorCtrl.forward(from: 0).orCancel.catchError((_) {});
       if (!mounted) return;
+      if (_page != 2) continue;
 
-      // Step 3: remain visible, static, until leaving this page
+      // Step 3 & 4: cursor stays fixed; the entire habit card slides left,
+      // gradually revealing the EDIT background, until max swipe position.
       await _swipeRowCtrl.forward(from: 0).orCancel.catchError((_) {});
       if (!mounted) return;
+      if (_page != 2) continue;
 
-      // Step 4: remain in swiped position, static, until leaving this page
-      while (mounted && _page == 2) {
-        await Future.delayed(const Duration(milliseconds: 200));
-      }
+      // Step 5: pause briefly at the final swipe position
+      await Future.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
+      if (_page != 2) continue;
+
+      // Step 6: cursor fades out completely (opacity only, no movement)
+      await _swipeCursorCtrl.reverse(from: 1.0).orCancel.catchError((_) {});
+      if (!mounted) return;
+      _swipeCursorCtrl.value = 0.0;
+      if (_page != 2) continue;
+
+      // Step 7: only after the cursor has fully disappeared does the
+      // entire habit card smoothly slide back to its original position.
+      await _swipeRowCtrl.reverse(from: 1.0).orCancel.catchError((_) {});
+      if (!mounted) return;
       _swipeRowCtrl.value = 0.0;
+      if (_page != 2) continue;
+
+      // Step 8 & 9: habit is fully closed again; pause briefly before
+      // restarting the loop from the beginning (step 10).
+      await Future.delayed(const Duration(milliseconds: 500));
     }
   }
 
@@ -7805,7 +7827,7 @@ void _resetAllStates() {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 13,
+                          fontSize: 15,
                           letterSpacing: 2,
                           fontWeight: FontWeight.w700,
                         ),
