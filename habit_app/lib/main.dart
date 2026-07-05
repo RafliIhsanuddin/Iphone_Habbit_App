@@ -7653,7 +7653,9 @@ void _resetAllStates() {
 
       // Step 7: only after the cursor has fully disappeared does the
       // entire habit card smoothly slide back to its original position.
+      _swipeRowCtrl.duration = const Duration(milliseconds: 100);
       await _swipeRowCtrl.reverse(from: 1.0).orCancel.catchError((_) {});
+      _swipeRowCtrl.duration = const Duration(milliseconds: 250);
       if (!mounted) return;
       _swipeRowCtrl.value = 0.0;
       if (_page != 2) continue;
@@ -7827,7 +7829,7 @@ void _resetAllStates() {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 15,
+                          fontSize: 16,
                           letterSpacing: 2,
                           fontWeight: FontWeight.w700,
                         ),
