@@ -7528,7 +7528,7 @@ void _resetAllStates() {
       duration: const Duration(milliseconds: 500),
     );
     _swipeRowAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _swipeRowCtrl, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _swipeRowCtrl, curve: Curves.easeOut),
     );
 
     _runCycle();
@@ -7668,7 +7668,7 @@ void _resetAllStates() {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    return tp.width + 20.0;
+    return tp.width + 60.0;
   }
 
   Widget _buildSwipeEditDemo() {
@@ -7785,7 +7785,7 @@ void _resetAllStates() {
               child: Container(
               width: double.infinity,
               height: 80 + tutorialBlackBackgroundHeightOffset,
-              color: Colors.black,
+              color: Colors.transparent,
               child: Stack(
               alignment: Alignment.centerRight,
               children: [
@@ -7796,19 +7796,18 @@ void _resetAllStates() {
                   bottom: 0,
                   width: _editRevealWidth,
                   child: Container(
-                    color: Colors.black,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: const Text(
-                          'EDIT',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            letterSpacing: 2,
-                            fontWeight: FontWeight.w700,
-                          ),
+                    color: const Color(0xFFB8B8B8),
+                    alignment: Alignment.center,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: const Text(
+                        'EDIT',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          letterSpacing: 2,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -7823,7 +7822,11 @@ void _resetAllStates() {
                       child: child,
                     );
                   },
-                  child: Center(
+                  child: Container(
+                    width: double.infinity,
+                    height: 80 + tutorialBlackBackgroundHeightOffset,
+                    color: Colors.black,
+                    child: Center(
               child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               child: Row(
@@ -7865,7 +7868,7 @@ void _resetAllStates() {
                           children: [
                             // Status indicator — fixed on the right
                             Positioned(
-                              right: 0,
+                              right: 18,
                               child: _page == 0
                                   ? AnimatedSwitcher(
                                         duration: const Duration(milliseconds: 200),
@@ -7996,7 +7999,7 @@ void _resetAllStates() {
               ),
               ),
                 ),
-              )],
+              ))],
             ),
             ),
             ),
