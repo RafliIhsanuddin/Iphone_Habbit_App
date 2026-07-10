@@ -14,10 +14,35 @@
 import 'package:flutter/material.dart';
 import 'reminder_service.dart';
 
-class SnoozePage extends StatelessWidget {
+class SnoozePage extends StatefulWidget {
   final String habitId;
   final String habitTitle;
   const SnoozePage({super.key, required this.habitId, required this.habitTitle});
+
+  @override
+  State<SnoozePage> createState() => _SnoozePageState();
+}
+
+class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateMixin {
+  late final AnimationController _rippleCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _rippleCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _rippleCtrl.dispose();
+    super.dispose();
+  }
+
+  String get habitId => widget.habitId;
+  String get habitTitle => widget.habitTitle;
 
   String _currentTimeLabel() {
     final now = DateTime.now();
@@ -91,30 +116,48 @@ class SnoozePage extends StatelessWidget {
                   color: Color(0xFF2C2C2C),
                   shape: BoxShape.circle,
                 ),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'SNOOZE',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedBuilder(
+                          animation: _rippleCtrl,
+                          builder: (context, child) {
+                            final t = _rippleCtrl.value;
+                            return CustomPaint(
+                              painter: _RippleCirclePainter(progress: t),
+                            );
+                          },
                         ),
                       ),
-                      SizedBox(height: 4),
-                      Text(
-                        '10 minutes',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    ),
+                    const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'SNOOZE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            '10 minutes',
+                            style: TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -149,4 +192,25 @@ class SnoozePage extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RippleCirclePainter extends CustomPainter {
+  final double progress;
+  const _RippleCirclePainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = size.width / 2;
+    final radius = maxRadius * progress;
+    final opacity = (1.0 - progress).clamp(0.0, 1.0);
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: opacity)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_RippleCirclePainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

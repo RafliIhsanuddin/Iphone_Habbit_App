@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/scheduler.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'reminder_service.dart';
 import 'snooze_page.dart';
@@ -91,11 +92,12 @@ void main() async {
   ReminderService.navigatorKey = appNavigatorKey;
   ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) =>
       SnoozePage(habitId: habitId, habitTitle: habitTitle);
-  runApp(const HabitApp());
+  runApp(HabitApp(webPreviewSnooze: kIsWeb));
 }
 
 class HabitApp extends StatelessWidget {
-  const HabitApp({super.key});
+  const HabitApp({super.key, this.webPreviewSnooze = false});
+  final bool webPreviewSnooze;
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: appNavigatorKey,
@@ -119,7 +121,9 @@ class HabitApp extends StatelessWidget {
             ),
           );
         },
-        home: const HabitHomePage(),
+        home: webPreviewSnooze
+            ? const SnoozePage(habitId: 'preview', habitTitle: 'STUDY')
+            : const HabitHomePage(),
       );
 }
 
