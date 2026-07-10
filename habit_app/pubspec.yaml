@@ -35,6 +35,11 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.5.5
+  flutter_local_notifications: ^18.0.1
+  android_alarm_manager_plus: ^4.0.4
+  timezone: ^0.9.4          # dibutuhkan flutter_local_notifications untuk penjadwalan berbasis waktu lokal
+  flutter_timezone: ^3.0.1   # dibutuhkan untuk mendapatkan timezone lokal device secara akurat
+  permission_handler: ^11.3.1  # untuk request izin notifikasi & exact alarm secara eksplisit
 
 dev_dependencies:
   flutter_test:

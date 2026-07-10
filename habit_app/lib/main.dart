@@ -4,6 +4,8 @@ import 'package:flutter/scheduler.dart';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'reminder_service.dart';
+import 'snooze_page.dart';
 
 
 // ─── Category Persistence ─────────────────────────────────────────────────────
@@ -63,9 +65,32 @@ class CategoryStore {
   }
 
 }
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+void deleteHabitEverywhere(List<Habit> allHabits, String habitId) {
+  final idx = allHabits.indexWhere((h) => h.id == habitId);
+  if (idx == -1) return;
+  final target = allHabits[idx];
+  ReminderService.instance.cancelAllForHabit(
+    target.id,
+    target.reminders.map((r) => r.time).toList(),
+  );
+  allHabits.removeWhere((h) => h.id == habitId);
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
   await CategoryStore.init();
+
+  await ReminderService.instance.init();
+  await ReminderService.instance.requestPermissions();
+  ReminderService.navigatorKey = appNavigatorKey;
+  ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) =>
+      SnoozePage(habitId: habitId, habitTitle: habitTitle);
   runApp(const HabitApp());
 }
 
@@ -73,6 +98,7 @@ class HabitApp extends StatelessWidget {
   const HabitApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Habits',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
@@ -848,7 +874,7 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                                 builder: (_) => EditHabitScreen(
                                   habit: widget.habit,
                                   allHabits: widget.allHabits,
-                                  onDelete: () => widget.allHabits.removeWhere((h) => h.id == widget.habit.id),
+                                  onDelete: () => deleteHabitEverywhere(widget.allHabits, widget.habit.id),
                                 ),
                               ),
                             );
@@ -3458,12 +3484,21 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
       builder: (_) => _RemindersModal(
         reminders: _reminders,
         onChanged: (updated) {
+          final previousTimes = _reminders.map((r) => r.time).toList();
           setState(() {
             _reminders = updated;
             widget.habit.reminders
               ..clear()
               ..addAll(updated);
           });
+          ReminderService.instance.rescheduleHabit(
+            habitId: widget.habit.id,
+            habitTitle: widget.habit.title,
+            previousTimes: previousTimes,
+            currentReminders: updated
+                .map((r) => ReminderInput(time: r.time, type: r.type))
+                .toList(),
+          );
         },
       ),
     );
@@ -5868,7 +5903,7 @@ class _HabitsCardBottomSheetState extends State<_HabitsCardBottomSheet> {
           habit: widget.habit,
           allHabits: widget.allHabits,
           onDelete: () {
-            widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+            deleteHabitEverywhere(widget.allHabits, widget.habit.id);
             widget.onDeleted();
           },
         ),
@@ -5930,7 +5965,7 @@ class _HabitsCardBottomSheetState extends State<_HabitsCardBottomSheet> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
-                          widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+                          deleteHabitEverywhere(widget.allHabits, widget.habit.id);
                           Navigator.pop(context); // close confirm dialog
                           Navigator.pop(context); // close bottom sheet
                           widget.onDeleted();
@@ -6218,7 +6253,7 @@ class _ArchivedCardBottomSheetState extends State<_ArchivedCardBottomSheet> {
           habit: widget.habit,
           allHabits: widget.allHabits,
           onDelete: () {
-            widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+            deleteHabitEverywhere(widget.allHabits, widget.habit.id);
             widget.onDeleted();
           },
         ),
@@ -6272,7 +6307,7 @@ class _ArchivedCardBottomSheetState extends State<_ArchivedCardBottomSheet> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
-                          widget.allHabits.removeWhere((h) => h.id == widget.habit.id);
+                          deleteHabitEverywhere(widget.allHabits, widget.habit.id);
                           Navigator.pop(context);
                           Navigator.pop(context);
                           widget.onDeleted();
@@ -7011,7 +7046,7 @@ class _HabitsScreenState extends State<HabitsScreen> {
         selectedDay: today,
         onStateChanged: (s) => h.setStateOn(today, s),
         onNoteChanged: (n) => h.setNoteOn(today, n),
-        onDelete: () => widget.habits.removeWhere((x) => x.id == h.id),
+        onDelete: () => deleteHabitEverywhere(widget.habits, h.id),
       ),
     ).then((_) { if (mounted) setState(() {}); });
   }
@@ -8494,6 +8529,18 @@ class _HabitHomePageState extends State<HabitHomePage> {
     final now = DateTime.now();
     _lastKnownToday = DateTime(now.year, now.month, now.day);
     _midnightTimer = Timer.periodic(const Duration(seconds: 30), (_) => _checkDateRollover());
+    ReminderService.onMarkDone = _handleReminderMarkDone;
+    // Terapkan action DONE yang ditekan saat app sepenuhnya terminated
+    // (lihat ReminderService._onBackgroundNotificationResponse).
+    ReminderService.instance.consumePendingBackgroundAction();
+  }
+
+  void _handleReminderMarkDone(String habitId) {
+    final idx = _all.indexWhere((h) => h.id == habitId);
+    if (idx == -1) return;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    setState(() => _all[idx].setStateOn(today, HabitState.done));
   }
 
   void _checkDateRollover() {
@@ -8652,7 +8699,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
           setState(() => habit.setNoteOn(_sel, n));
         },
         onDelete: () {
-          setState(() => _all.removeWhere((h) => h.id == id));
+          setState(() => deleteHabitEverywhere(_all, id));
         },
       ),
     );
@@ -8680,15 +8727,29 @@ class _HabitHomePageState extends State<HabitHomePage> {
   }
 
   void _addFromResult(dynamic r){
+    Habit? newHabit;
     if(r is HabitScheduleResult){
       final sd=DateTime.tryParse(r.startDate)??DateTime.now();
       final ed=r.endDate.isNotEmpty?DateTime.tryParse(r.endDate):null;
-      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency,freqWeekDays:Map.from(r.freqWeekDays),freqMonthDays:Set.from(r.freqMonthDays),freqYearDays:List.from(r.freqYearDays),freqPeriodDays:r.freqPeriodDays,freqPeriodUnit:r.freqPeriodUnit,freqRepeatEvery:r.freqRepeatEvery,freqFlexible:r.freqFlexible));
+      newHabit = Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r.title.isNotEmpty?r.title:r.category,category:r.category,description:r.description,priority:r.priority,reminders:r.reminders,startDate:sd,endDate:ed,frequency:r.frequency,freqWeekDays:Map.from(r.freqWeekDays),freqMonthDays:Set.from(r.freqMonthDays),freqYearDays:List.from(r.freqYearDays),freqPeriodDays:r.freqPeriodDays,freqPeriodUnit:r.freqPeriodUnit,freqRepeatEvery:r.freqRepeatEvery,freqFlexible:r.freqFlexible);
+      _all.add(newHabit);
     }else if(r is String){
-      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now()));
+      newHabit = Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:r,category:r,description:'',startDate:DateTime.now());
+      _all.add(newHabit);
     }else if(r is Map){
       final sd=r['startDate']!=null?DateTime.tryParse(r['startDate'] as String)??DateTime.now():DateTime.now();
-      _all.add(Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd));
+      newHabit = Habit(id:DateTime.now().millisecondsSinceEpoch.toString(),title:((r['title']??r['category'])as String?)??' ',category:(r['category']as String?)??' ',description:(r['description']as String?)??' ',startDate:sd);
+      _all.add(newHabit);
+    }
+    if (newHabit != null && newHabit.reminders.isNotEmpty) {
+      ReminderService.instance.rescheduleHabit(
+        habitId: newHabit.id,
+        habitTitle: newHabit.title,
+        previousTimes: const [],
+        currentReminders: newHabit.reminders
+            .map((r) => ReminderInput(time: r.time, type: r.type))
+            .toList(),
+      );
     }
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -8885,7 +8946,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
               earliestReminderTime:_earliestTime,
               buildStatusIcon:_statusIcon,
               onTap:_cycle,
-              onDismiss:(id)=>setState(()=>_all.removeWhere((h)=>h.id==id)),
+              onDismiss:(id)=>setState(()=>deleteHabitEverywhere(_all, id)),
               onLongPress:_longPress,
             )),
       ])),
@@ -8922,6 +8983,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   @override
   void dispose() {
+  ReminderService.onMarkDone = null;
   _midnightTimer?.cancel();
   _ctrl.dispose();
   _searchCtrl.dispose();   // added
