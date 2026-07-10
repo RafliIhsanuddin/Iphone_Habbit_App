@@ -109,9 +109,26 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                   Navigator.of(context).pop();
                 }
               },
-              child: Container(
-                width: 200,
-                height: 200,
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: _rippleCtrl,
+                        builder: (context, child) {
+                          final t = _rippleCtrl.value;
+                          return CustomPaint(
+                            painter: _RippleCirclePainter(progress: t),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  Container(
+                width: 170,
+                height: 170,
                 decoration: const BoxDecoration(
                   color: Color(0xFF2C2C2C),
                   shape: BoxShape.circle,
@@ -119,19 +136,6 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: AnimatedBuilder(
-                          animation: _rippleCtrl,
-                          builder: (context, child) {
-                            final t = _rippleCtrl.value;
-                            return CustomPaint(
-                              painter: _RippleCirclePainter(progress: t),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
                     const Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -140,7 +144,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                             'SNOOZE',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 20,
+                              fontSize: 15,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
                             ),
@@ -159,6 +163,8 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                     ),
                   ],
                 ),
+              ),
+                ],
               ),
             ),
             const Spacer(),
@@ -201,9 +207,11 @@ class _RippleCirclePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2;
-    final radius = maxRadius * progress;
-    final opacity = (1.0 - progress).clamp(0.0, 1.0);
+    final baseRadius = size.width / 2;
+    final startRadius = baseRadius * 0.9;
+    final endRadius = baseRadius * 1.8;
+    final radius = startRadius + (endRadius - startRadius) * progress;
+    final opacity = (0.2 * (1.0 - progress)).clamp(0.0, 1.0);
     final paint = Paint()
       ..color = Colors.white.withValues(alpha: opacity)
       ..style = PaintingStyle.fill;
