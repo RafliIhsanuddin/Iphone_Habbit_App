@@ -329,17 +329,16 @@ class ReminderService {
   }
 
   @pragma('vm:entry-point')
-  static void _onBackgroundNotificationResponse(
-      NotificationResponse response) {
+  static Future<void> _onBackgroundNotificationResponse(
+      NotificationResponse response) async {
     // Isolate terpisah (app state: terminated) — hanya menulis pending
     // action ke SharedPreferences; UI isolate yang memprosesnya lewat
     // consumePendingBackgroundAction() saat app dibuka kembali.
     final payload = ReminderPayload.decode(response.payload);
     if (payload == null) return;
     if (response.actionId != ReminderActionIds.done) return;
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setString('pending_mark_done_habit_id', payload.habitId);
-    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_mark_done_habit_id', payload.habitId);
   }
 
   FlutterLocalNotificationsPlugin get rawPlugin => _plugin;

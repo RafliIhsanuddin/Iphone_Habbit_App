@@ -79,7 +79,10 @@ void deleteHabitEverywhere(List<Habit> allHabits, String habitId) {
   allHabits.removeWhere((h) => h.id == habitId);
 }
 
+final List<Habit> _rootHabits = [];
+
 void main() async {
+  List<Habit> _snoozeLookupHabits = [];
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
@@ -90,8 +93,12 @@ void main() async {
   await ReminderService.instance.init();
   await ReminderService.instance.requestPermissions();
   ReminderService.navigatorKey = appNavigatorKey;
-  ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) =>
-      SnoozePage(habitId: habitId, habitTitle: habitTitle);
+  ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) {
+    final match = _rootHabits.where((h) => h.id == habitId);
+    final category = match.isNotEmpty ? match.first.category : '';
+    return SnoozePage(habitId: habitId, habitTitle: habitTitle, habitCategory: category);
+  };
+
   runApp(HabitApp(webPreviewSnooze: kIsWeb));
 }
 
@@ -122,8 +129,8 @@ class HabitApp extends StatelessWidget {
           );
         },
         home: webPreviewSnooze
-            ? const SnoozePage(habitId: 'preview', habitTitle: 'STUDY')
-            : const HabitHomePage(),
+            ? const SnoozePage(habitId: 'preview', habitTitle: 'STUDY', habitCategory: 'ENGLISH')
+            : HabitHomePage(habits: _rootHabits),
       );
 }
 
@@ -8512,7 +8519,8 @@ class _CalendarPickerSheetState extends State<_CalendarPickerSheet> {
 // ─── Habit Home Page ──────────────────────────────────────────────────────────
 
 class HabitHomePage extends StatefulWidget {
-  const HabitHomePage({super.key});
+  final List<Habit>? habits;
+  const HabitHomePage({super.key, this.habits});
   @override State<HabitHomePage> createState() => _HabitHomePageState();
 }
 
@@ -8520,7 +8528,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
   bool _searchOpen=false;
   DateTime _sel=DateTime.now();
   late DateTime _weekStart;
-  final List<Habit> _all=[];
+  late final List<Habit> _all = widget.habits ?? [];
   final _ctrl=TextEditingController();
   final _scaffoldKey=GlobalKey<ScaffoldState>();
   Timer? _midnightTimer;

@@ -17,7 +17,8 @@ import 'reminder_service.dart';
 class SnoozePage extends StatefulWidget {
   final String habitId;
   final String habitTitle;
-  const SnoozePage({super.key, required this.habitId, required this.habitTitle});
+  final String habitCategory;
+  const SnoozePage({super.key, required this.habitId, required this.habitTitle, required this.habitCategory});
 
   @override
   State<SnoozePage> createState() => _SnoozePageState();
@@ -43,6 +44,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
 
   String get habitId => widget.habitId;
   String get habitTitle => widget.habitTitle;
+  String get habitCategory => widget.habitCategory;
 
   String _currentTimeLabel() {
     final now = DateTime.now();
@@ -62,12 +64,14 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             // ── Jam + label habit (mirip tampilan alarm sistem) ──
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.symmetric(vertical: 24),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1C1C1C),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Text(
                     _currentTimeLabel(),
@@ -77,15 +81,31 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    habitTitle.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
+                  const SizedBox(width: 20),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        habitTitle.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        habitCategory.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
