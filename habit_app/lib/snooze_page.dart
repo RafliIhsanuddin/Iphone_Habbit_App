@@ -63,15 +63,13 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             const SizedBox(height: 24),
             // ── Jam + label habit (mirip tampilan alarm sistem) ──
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(vertical: 24),
               decoration: BoxDecoration(
                 color: const Color(0xFF1C1C1C),
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
+              child: Column(
                 children: [
                   Text(
                     _currentTimeLabel(),
@@ -81,33 +79,27 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(width: 20),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        habitTitle.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        habitCategory.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 6),
+                  Text(
+                    habitCategory.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              habitTitle.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
               ),
             ),
             const Spacer(),
