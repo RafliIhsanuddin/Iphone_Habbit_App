@@ -26,7 +26,12 @@ class SnoozePage extends StatefulWidget {
 
 class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateMixin {
   late final AnimationController _rippleCtrl;
-
+  static const double _timeNumberYOffset = 0.0;
+  static const double _habitTitleYOffset = 0.0;
+  static const double _habitCategoryYOffset = 0.0;
+  static const double _timeNumberFontSize = 48.0;
+  static const double _habitTitleFontSize = 20.0;
+  static const double _habitCategoryFontSize = 18.0;
   @override
   void initState() {
     super.initState();
@@ -43,8 +48,14 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
   }
 
   String get habitId => widget.habitId;
-  String get habitTitle => widget.habitTitle;
-  String get habitCategory => widget.habitCategory;
+  // NOTE: widget.habitCategory actually carries the HABIT TITLE value
+  // (e.g. "ENGLISH") in how this page is currently invoked. This getter
+  // is named to reflect what it truly represents on screen.
+  String get _displayedHabitTitle => widget.habitCategory;
+  // NOTE: widget.habitTitle actually carries the HABIT CATEGORY value
+  // (e.g. "STUDY") in how this page is currently invoked. This getter
+  // is named to reflect what it truly represents on screen.
+  String get _displayedHabitCategory => widget.habitTitle;
 
   String _currentTimeLabel() {
     final now = DateTime.now();
@@ -63,43 +74,53 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             const SizedBox(height: 24),
             // ── Jam + label habit (mirip tampilan alarm sistem) ──
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 8),
-              padding: const EdgeInsets.symmetric(vertical: 24),
+              width: double.infinity,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(vertical: 20),
               decoration: BoxDecoration(
                 color: const Color(0xFF1C1C1C),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 children: [
-                  Text(
-                    _currentTimeLabel(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 48,
-                      fontWeight: FontWeight.w800,
+                  Transform.translate(
+                    offset: const Offset(0, _timeNumberYOffset),
+                    child: Text(
+                      _currentTimeLabel(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: _timeNumberFontSize,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),
-                  Text(
-                    habitCategory.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+                  Transform.translate(
+                    offset: const Offset(0, _habitTitleYOffset),
+                    child: Text(
+                      _displayedHabitTitle.toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: _habitTitleFontSize,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
-            Text(
-              habitTitle.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.5,
+            Transform.translate(
+              offset: const Offset(0, _habitCategoryYOffset),
+              child: Text(
+                _displayedHabitCategory.toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: _habitCategoryFontSize,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
               ),
             ),
             const Spacer(),
@@ -109,7 +130,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
               onTap: () async {
                 await ReminderService.instance.rescheduleSingleInMinutes(
                   habitId: habitId,
-                  habitTitle: habitTitle,
+                  habitTitle: _displayedHabitTitle,
                   reminderTime: _currentTimeLabel(),
                   type: 'alarm',
                   minutesFromNow: 10,
