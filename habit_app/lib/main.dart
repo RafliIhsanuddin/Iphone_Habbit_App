@@ -8,6 +8,23 @@ import 'dart:async';
 import 'reminder_service.dart';
 import 'snooze_page.dart';
 
+class PostponeIntervalStore {
+  static const _key = 'postpone_interval_minutes';
+  static int _cache = 10;
+
+  static Future<void> init() async {
+    final prefs = await SharedPreferences.getInstance();
+    _cache = prefs.getInt(_key) ?? 10;
+  }
+
+  static int get minutes => _cache;
+
+  static Future<void> setMinutes(int value) async {
+    _cache = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_key, value);
+  }
+}
 
 // ─── Category Persistence ─────────────────────────────────────────────────────
 
@@ -89,6 +106,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   await CategoryStore.init();
+  await PostponeIntervalStore.init();
 
   await ReminderService.instance.init();
   await ReminderService.instance.requestPermissions();
@@ -8562,11 +8580,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: const Text(
-                'NOTIFICATIONS AND ALARMS',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsAndAlarmsScreen()),
+                );
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: const Text(
+                  'NOTIFICATIONS AND ALARMS',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                ),
               ),
             ),
           ],
@@ -8578,6 +8605,185 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 
 // ─── Habit Home Page ──────────────────────────────────────────────────────────
+
+class NotificationsAndAlarmsScreen extends StatefulWidget {
+  const NotificationsAndAlarmsScreen({super.key});
+  @override State<NotificationsAndAlarmsScreen> createState() => _NotificationsAndAlarmsScreenState();
+}
+
+class _NotificationsAndAlarmsScreenState extends State<NotificationsAndAlarmsScreen> {
+  void _openPicker() {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (_) => _PostponeIntervalPickerDialog(
+        initialMinutes: PostponeIntervalStore.minutes,
+        onConfirm: (v) async {
+          await PostponeIntervalStore.setMinutes(v);
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    ),
+                  ),
+                  const Text(
+                    'NOTIFICATIONS AND ALARMS',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _openPicker,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    const Text(
+                      'POSTPONE INTERVAL',
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${PostponeIntervalStore.minutes} MINUTES',
+                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PostponeIntervalPickerDialog extends StatefulWidget {
+  final int initialMinutes;
+  final void Function(int) onConfirm;
+  const _PostponeIntervalPickerDialog({required this.initialMinutes, required this.onConfirm});
+  @override State<_PostponeIntervalPickerDialog> createState() => _PostponeIntervalPickerDialogState();
+}
+
+class _PostponeIntervalPickerDialogState extends State<_PostponeIntervalPickerDialog> {
+  static final List<int> _values = List<int>.generate(60, (i) => i + 1);
+  late int _index;
+  late int _selected;
+  late final FixedExtentScrollController _wheelController;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = _values.indexOf(widget.initialMinutes);
+    if (_index == -1) _index = _values.indexOf(10);
+    _selected = _values[_index];
+    _wheelController = FixedExtentScrollController(initialItem: _values.length * 1000 + _index);
+  }
+
+  @override
+  void dispose() {
+    _wheelController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF2C2C2C),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 32),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Center(child: Text('POSTPONE INTERVAL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+          ),
+          Container(height: 0.5, color: Colors.white24),
+          SizedBox(
+            height: 150,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ListWheelScrollView.useDelegate(
+                  itemExtent: 44,
+                  physics: const FixedExtentScrollPhysics(),
+                  controller: _wheelController,
+                  onSelectedItemChanged: (i) => setState(() {
+                    final realIndex = i % _values.length;
+                    _index = realIndex;
+                    _selected = _values[realIndex];
+                  }),
+                  childDelegate: ListWheelChildBuilderDelegate(
+                    builder: (c, i) {
+                      final realIndex = i % _values.length;
+                      final isSel = realIndex == _index;
+                      return Center(
+                        child: Text(
+                          '${_values[realIndex]} ${_values[realIndex] == 1 ? 'MINUTE' : 'MINUTES'}',
+                          style: TextStyle(
+                            color: isSel ? Colors.white : Colors.white38,
+                            fontSize: isSel ? 17 : 14,
+                            fontWeight: isSel ? FontWeight.w800 : FontWeight.w400,
+                          ),
+                        ),
+                      );
+                    },
+                    childCount: null,
+                  ),
+                ),
+                IgnorePointer(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Container(height: 0.5, width: double.infinity, color: Colors.white38),
+                      ),
+                      const SizedBox(height: 44),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 48),
+                        child: Container(height: 0.5, width: double.infinity, color: Colors.white38),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(height: 1, color: Colors.white38),
+          IntrinsicHeight(child: Row(children: [
+            Expanded(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => Navigator.pop(context), child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('CANCEL', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+            Container(width: 1, color: Colors.white38),
+            Expanded(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: () { widget.onConfirm(_selected); Navigator.pop(context); }, child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 14), child: const Center(child: Text('OK', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)))))),
+          ])),
+        ]),
+      ),
+    );
+  }
+}
 
 class HabitHomePage extends StatefulWidget {
   final List<Habit>? habits;

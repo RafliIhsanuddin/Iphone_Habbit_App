@@ -13,6 +13,7 @@
 
 import 'package:flutter/material.dart';
 import 'reminder_service.dart';
+import 'main.dart' show PostponeIntervalStore;
 
 class SnoozePage extends StatefulWidget {
   final String habitId;
@@ -133,11 +134,11 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                   habitTitle: _displayedHabitTitle,
                   reminderTime: _currentTimeLabel(),
                   type: 'alarm',
-                  minutesFromNow: 10,
+                  minutesFromNow: PostponeIntervalStore.minutes,
                 );
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Snoozed for 10 minutes')),
+                    SnackBar(content: Text('Snooze for ${PostponeIntervalStore.minutes} minutes')),
                   );
                   Navigator.of(context).pop();
                 }
@@ -169,11 +170,11 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Center(
+                    Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
+                          const Text(
                             'SNOOZE',
                             style: TextStyle(
                               color: Colors.white,
@@ -182,10 +183,10 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                               letterSpacing: 0.5,
                             ),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            '10 minutes',
-                            style: TextStyle(
+                            '${PostponeIntervalStore.minutes} minutes',
+                            style: const TextStyle(
                               color: Colors.white54,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
