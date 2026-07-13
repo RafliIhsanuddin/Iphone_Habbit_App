@@ -128,9 +128,7 @@ class HabitApp extends StatelessWidget {
             ),
           );
         },
-        home: webPreviewSnooze
-            ? const SnoozePage(habitId: 'preview', habitTitle: 'STUDY', habitCategory: 'ENGLISH')
-            : HabitHomePage(habits: _rootHabits),
+        home: HabitHomePage(habits: _rootHabits),
       );
 }
 
@@ -7381,6 +7379,19 @@ class _HabitsScreenState extends State<HabitsScreen> {
                   },
                   child: const SizedBox(width: double.infinity, child: Text('CATEGORIES', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
                 ),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(),
+                      ),
+                    );
+                  },
+                  child: const SizedBox(width: double.infinity, child: Text('SETTINGS', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
+                ),
               ],
             ),
           ),
@@ -8516,6 +8527,56 @@ class _CalendarPickerSheetState extends State<_CalendarPickerSheet> {
   }
 }
 
+// ─── Settings Screen ──────────────────────────────────────────────────────────
+
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.pop(context),
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.chevron_left, color: Colors.white, size: 28),
+                    ),
+                  ),
+                  const Text(
+                    'SETTINGS',
+                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: const Text(
+                'NOTIFICATIONS AND ALARMS',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 // ─── Habit Home Page ──────────────────────────────────────────────────────────
 
 class HabitHomePage extends StatefulWidget {
@@ -8803,26 +8864,42 @@ class _HabitHomePageState extends State<HabitHomePage> {
           ),
         ),
         const SizedBox(height:20),
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            Navigator.pop(context); // close the drawer first
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => _CategoriesScreen(
-                  customCategories: CategoryStore.custom,
-                  habits: _all,
-                  onChanged: (_) {},
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.pop(context); // close the drawer first
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => _CategoriesScreen(
+                          customCategories: CategoryStore.custom,
+                          habits: _all,
+                          onChanged: (_) {},
+                        ),
+                      ),
+                    );
+                  },
+                  child: const SizedBox(
+                    width: double.infinity,
+                    child: Text('CATEGORIES', style: TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,letterSpacing:0.5)),
+                  ),
                 ),
-              ),
-            );
-          },
-          child: const SizedBox(
-            width: double.infinity,
-            child: Text('CATEGORIES', style: TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,letterSpacing:0.5)),
-          ),
-        ),
-      ])))),
+                const SizedBox(height:20),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(),
+                      ),
+                    );
+                  },
+                  child: const SizedBox(
+                    width: double.infinity,
+                    child: Text('SETTINGS', style: TextStyle(color:Colors.white,fontSize:18,fontWeight:FontWeight.w700,letterSpacing:0.5)),
+                  ),
+                ),
+              ])))),
       body:SafeArea(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         if(!_searchOpen)Padding(padding:const EdgeInsets.symmetric(horizontal:20,vertical:14),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[
           Expanded(child:Row(crossAxisAlignment:CrossAxisAlignment.center,children:[
