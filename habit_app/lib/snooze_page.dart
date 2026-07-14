@@ -49,14 +49,10 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
   }
 
   String get habitId => widget.habitId;
-  // NOTE: widget.habitCategory actually carries the HABIT TITLE value
-  // (e.g. "ENGLISH") in how this page is currently invoked. This getter
-  // is named to reflect what it truly represents on screen.
-  String get _displayedHabitTitle => widget.habitCategory;
-  // NOTE: widget.habitTitle actually carries the HABIT CATEGORY value
-  // (e.g. "STUDY") in how this page is currently invoked. This getter
-  // is named to reflect what it truly represents on screen.
-  String get _displayedHabitCategory => widget.habitTitle;
+  // Displays the Habit Name inside the top rectangular box.
+  String get _displayedHabitTitle => widget.habitTitle;
+  // Displays the Habit Category outside the top rectangular box.
+  String get _displayedHabitCategory => widget.habitCategory;
 
   String _currentTimeLabel() {
     final now = DateTime.now();
