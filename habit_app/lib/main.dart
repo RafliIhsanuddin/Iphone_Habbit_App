@@ -8667,7 +8667,7 @@ class _NotificationsAndAlarmsScreenState extends State<NotificationsAndAlarmsScr
                     const Spacer(),
                     Text(
                       '${PostponeIntervalStore.minutes} MINUTES',
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                      style: const TextStyle(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.3),
                     ),
                   ],
                 ),
@@ -8741,12 +8741,26 @@ class _PostponeIntervalPickerDialogState extends State<_PostponeIntervalPickerDi
                       final realIndex = i % _values.length;
                       final isSel = realIndex == _index;
                       return Center(
-                        child: Text(
-                          '${_values[realIndex]} ${_values[realIndex] == 1 ? 'MINUTE' : 'MINUTES'}',
-                          style: TextStyle(
-                            color: isSel ? Colors.white : Colors.white38,
-                            fontSize: isSel ? 17 : 14,
-                            fontWeight: isSel ? FontWeight.w800 : FontWeight.w400,
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${_values[realIndex]} ',
+                                style: TextStyle(
+                                  color: isSel ? Colors.white : Colors.white38,
+                                  fontSize: isSel ? 17 : 14,
+                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w400,
+                                ),
+                              ),
+                              TextSpan(
+                                text: _values[realIndex] == 1 ? 'MINUTE' : 'MINUTES',
+                                style: TextStyle(
+                                  color: (isSel ? Colors.white : Colors.white38).withValues(alpha: isSel ? 0.6 : 0.4),
+                                  fontSize: isSel ? 17 : 14,
+                                  fontWeight: isSel ? FontWeight.w800 : FontWeight.w400,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
