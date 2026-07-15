@@ -632,8 +632,9 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                 final cellIndex = row * 7 + col;
                 final dayNum = cellIndex - firstWd + 1;
                 if (dayNum < 1 || dayNum > daysInMonth) {
-                return const SizedBox(width: 46, height: 64);
+                return const SizedBox(width: 40, height: 64);
               }
+
               final date = DateTime(year, month, dayNum);
               final state = widget.habit.stateOn(date);
               final isToday = date.year == today.year && date.month == today.month && date.day == today.day;
@@ -824,10 +825,7 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
                     }
                   });
                 },
-                child: SizedBox(
-                  width: 46,
-                  child: Center(child: cellContent),
-                ),
+                child: SizedBox(width: 40, child: Center(child: cellContent)),
               );
             }),
           ),
@@ -844,7 +842,9 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.0)),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Header ──
@@ -999,6 +999,7 @@ class _HabitCalendarPageState extends State<HabitCalendarPage> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
