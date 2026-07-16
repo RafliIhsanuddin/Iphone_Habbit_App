@@ -17,6 +17,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -79,6 +80,17 @@ class ReminderService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+
+  // Native channel: plays/stops the phone's actual default alarm sound
+  // (RingtoneManager.TYPE_ALARM) on the alarm audio stream, looping, via
+  // Android's MediaPlayer. See android/app MainActivity for the handler.
+  static const MethodChannel _alarmChannel = MethodChannel('habit_app/alarm');
+  final Set<String> _activeAlarmHabitIds = {};
+
+  /// Callback set by main.dart to retrieve the current Postpone Interval
+  /// (in minutes) from Settings, so snooze scheduling never hardcodes a
+  /// duration.
+  static int Function()? getSnoozeMinutes;
 
   /// Kunci navigator global — di-set dari main.dart (MaterialApp.navigatorKey)
   /// supaya ReminderService bisa melakukan Navigator.push() dari luar widget
@@ -252,6 +264,9 @@ class ReminderService {
         // Tutup saja. Tidak mengubah status habit, tidak menjadwalkan lagi.
         // (Notifikasi sudah otomatis tertutup karena cancelNotification:true
         // pada action DISMISS; panggilan cancel() di sini untuk jaga-jaga.)
+        if (payload.type == 'alarm') {
+          stopAlarmSound(payload.habitId);
+        }
         _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
         break;
 
@@ -268,15 +283,17 @@ class ReminderService {
         break;
 
       case ReminderActionIds.snooze:
-        // Jadwalkan ulang alarm +10 menit, tampilkan konfirmasi platform.
+        // Jadwalkan ulang alarm sesuai Postpone Interval dari Settings.
+        stopAlarmSound(payload.habitId);
+        final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
         rescheduleSingleInMinutes(
           habitId: payload.habitId,
           habitTitle: _lastKnownHabitTitle(payload.habitId),
           reminderTime: payload.reminderTime,
           type: 'alarm',
-          minutesFromNow: 10,
+          minutesFromNow: snoozeMinutes,
         );
-        _showConfirmationToast('Snoozed for 10 minutes');
+        _showConfirmationToast('Snooze for $snoozeMinutes ${snoozeMinutes == 1 ? "minute" : "minutes"}');
         break;
     }
   }
@@ -336,6 +353,16 @@ class ReminderService {
     // consumePendingBackgroundAction() saat app dibuka kembali.
     final payload = ReminderPayload.decode(response.payload);
     if (payload == null) return;
+    if (response.actionId == ReminderActionIds.dismiss ||
+        response.actionId == ReminderActionIds.snooze) {
+      // Notification sound (category alarm, playSound true) is tied to
+      // the notification itself; cancelling it here (dismiss already
+      // does via cancelNotification:true) stops the OS-played sound
+      // immediately even when the app process was killed.
+      final plugin = ReminderService.instance._plugin;
+      await plugin.cancel(ReminderService.instance
+          ._notifId(payload.habitId, payload.reminderTime));
+    }
     if (response.actionId != ReminderActionIds.done) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('pending_mark_done_habit_id', payload.habitId);
@@ -346,11 +373,32 @@ class ReminderService {
   /// Stops any currently playing alarm sound for the given habit, if any.
   /// Safe to call even if no alarm sound is playing.
   Future<void> stopAlarmSound(String habitId) async {
-    // No dedicated audio player is currently tracked for alarm sounds
-    // in this service; alarm audio is handled by the OS-level
-    // notification/alarm channel, so there is nothing to stop here
-    // beyond cancelling the active notification for this habit.
-    // This is a safe no-op if nothing is currently playing.
+    if (!_activeAlarmHabitIds.remove(habitId)) return;
+    try {
+      await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
+    } on PlatformException catch (e) {
+      debugPrint('stopAlarmSound failed for $habitId: $e');
+    } catch (e) {
+      debugPrint('stopAlarmSound failed for $habitId: $e');
+    }
+  }
+
+  /// Starts the looping alarm sound for the given habit, using the phone's
+  /// actual default alarm sound (RingtoneManager.TYPE_ALARM) played on the
+  /// alarm audio stream via native Android code. If already active for this
+  /// habit, this is a safe no-op — it never creates a duplicate playback.
+  Future<void> playAlarmSound(String habitId) async {
+    if (_activeAlarmHabitIds.contains(habitId)) return;
+    _activeAlarmHabitIds.add(habitId);
+    try {
+      await _alarmChannel.invokeMethod('playAlarm', {'habitId': habitId});
+    } on PlatformException catch (e) {
+      debugPrint('playAlarmSound failed for $habitId: $e');
+      _activeAlarmHabitIds.remove(habitId);
+    } catch (e) {
+      debugPrint('playAlarmSound failed for $habitId: $e');
+      _activeAlarmHabitIds.remove(habitId);
+    }
   }
 
   // ── Notification channel ids (Android) ──
@@ -402,6 +450,16 @@ class ReminderService {
       priority: Priority.high,
       fullScreenIntent: true,
       category: AndroidNotificationCategory.alarm,
+      // Do not use the platform's own (short, non-looping) notification
+      // sound for alarms: ReminderService.playAlarmSound() provides a
+      // continuous, looping alarm sound instead. Playing both would result
+      // in only the short default sound being audible, which is the bug
+      // this change fixes.
+      playSound: false,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      enableVibration: true,
+      ongoing: true,
+      autoCancel: false,
       actions: [
         AndroidNotificationAction(ReminderActionIds.dismiss, 'DISMISS',
             cancelNotification: true),

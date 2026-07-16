@@ -41,6 +41,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 1600),
     )..repeat();
+    ReminderService.instance.playAlarmSound(habitId);
   }
 
   @override

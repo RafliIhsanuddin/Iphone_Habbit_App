@@ -112,6 +112,7 @@ void main() async {
   await ReminderService.instance.init();
   await ReminderService.instance.requestPermissions();
   ReminderService.navigatorKey = appNavigatorKey;
+  ReminderService.getSnoozeMinutes = () => PostponeIntervalStore.minutes;
   ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) {
     final match = _rootHabits.where((h) => h.id == habitId);
     final category = match.isNotEmpty ? match.first.category : '';
