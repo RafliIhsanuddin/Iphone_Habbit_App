@@ -85,6 +85,7 @@ class CategoryStore {
 }
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
+
 void deleteHabitEverywhere(List<Habit> allHabits, String habitId) {
   final idx = allHabits.indexWhere((h) => h.id == habitId);
   if (idx == -1) return;

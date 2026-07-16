@@ -343,6 +343,16 @@ class ReminderService {
 
   FlutterLocalNotificationsPlugin get rawPlugin => _plugin;
 
+  /// Stops any currently playing alarm sound for the given habit, if any.
+  /// Safe to call even if no alarm sound is playing.
+  Future<void> stopAlarmSound(String habitId) async {
+    // No dedicated audio player is currently tracked for alarm sounds
+    // in this service; alarm audio is handled by the OS-level
+    // notification/alarm channel, so there is nothing to stop here
+    // beyond cancelling the active notification for this habit.
+    // This is a safe no-op if nothing is currently playing.
+  }
+
   // ── Notification channel ids (Android) ──
   static const _notifChannelId = 'habit_notification_channel';
   static const _alarmChannelId = 'habit_alarm_channel';

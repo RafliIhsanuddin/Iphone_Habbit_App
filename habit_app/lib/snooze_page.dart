@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 import 'reminder_service.dart';
 import 'main.dart' show PostponeIntervalStore;
+import 'dart:math' as math;
 
 class SnoozePage extends StatefulWidget {
   final String habitId;
@@ -49,6 +50,28 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
   }
 
   String get habitId => widget.habitId;
+  bool _snoozeTriggered = false;
+
+  Future<void> _performSnooze() async {
+    if (_snoozeTriggered) return;
+    _snoozeTriggered = true;
+    final minutes = PostponeIntervalStore.minutes;
+    await ReminderService.instance.stopAlarmSound(habitId);
+    await ReminderService.instance.rescheduleSingleInMinutes(
+      habitId: habitId,
+      habitTitle: _displayedHabitTitle,
+      reminderTime: _currentTimeLabel(),
+      type: 'alarm',
+      minutesFromNow: minutes,
+    );
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Snooze for $minutes minutes')),
+      );
+    }
+  }
+
   // Displays the Habit Name inside the top rectangular box.
   String get _displayedHabitTitle => widget.habitTitle;
   // Displays the Habit Category outside the top rectangular box.
@@ -124,20 +147,19 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             // ── Tombol SNOOZE bulat besar di tengah ──
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () async {
-                await ReminderService.instance.rescheduleSingleInMinutes(
-                  habitId: habitId,
-                  habitTitle: _displayedHabitTitle,
-                  reminderTime: _currentTimeLabel(),
-                  type: 'alarm',
-                  minutesFromNow: PostponeIntervalStore.minutes,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Snooze for ${PostponeIntervalStore.minutes} minutes')),
-                  );
-                  Navigator.of(context).pop();
+              onTap: _performSnooze,
+              onLongPress: _performSnooze,
+              onPanUpdate: (details) {
+                if (_snoozeTriggered) return;
+                final dx = details.localPosition.dx - 85;
+                final dy = details.localPosition.dy - 85;
+                final dist = math.sqrt(dx * dx + dy * dy);
+                if (dist > 85) {
+                  _performSnooze();
                 }
+              },
+              onPanEnd: (details) {
+                if (!_snoozeTriggered) _performSnooze();
               },
               child: Stack(
                 alignment: Alignment.center,
@@ -201,7 +223,10 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             // ── Tombol DISMISS di bawah ──
             GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).pop(),
+              onTap: () async {
+                await ReminderService.instance.stopAlarmSound(habitId);
+                if (context.mounted) Navigator.of(context).pop();
+              },
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 width: double.infinity,
