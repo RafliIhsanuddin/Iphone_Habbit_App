@@ -8,6 +8,21 @@ import 'dart:async';
 import 'reminder_service.dart';
 import 'snooze_page.dart';
 
+// ─────────────────────────────────────────────────────────────
+// No-animation route used specifically for opening the Edit screen
+// from the Main Page (via long-press sheet / swipe / card menu).
+// Ensures that when Back is pressed from the Edit page, the Main
+// Page (including its bottom navigation / FAB) reappears instantly
+// in its final state, with no slide/fade transition of any kind.
+// ─────────────────────────────────────────────────────────────
+Route<T> _noAnimationEditRoute<T>({required WidgetBuilder builder}) {
+  return PageRouteBuilder<T>(
+    pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+    transitionDuration: Duration.zero,
+    reverseTransitionDuration: Duration.zero,
+  );
+}
+
 class PostponeIntervalStore {
   static const _key = 'postpone_interval_minutes';
   static int _cache = 10;
@@ -3041,7 +3056,11 @@ class EditHabitScreen extends StatefulWidget {
   final Habit habit;
   final List<Habit> allHabits;
   final VoidCallback onDelete;
-  const EditHabitScreen({super.key, required this.habit, required this.allHabits, required this.onDelete});
+  // Optional callback invoked immediately after any reminder change is
+  // committed to the shared Habit object, so an already-alive Main Page
+  // can rebuild in real time without waiting for this screen to be popped.
+  final VoidCallback? onHabitChanged;
+  const EditHabitScreen({super.key, required this.habit, required this.allHabits, required this.onDelete, this.onHabitChanged});
   @override State<EditHabitScreen> createState() => _EditHabitScreenState();
 }
 
@@ -3529,6 +3548,10 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                 .map((r) => ReminderInput(time: r.time, type: r.type))
                 .toList(),
           );
+          // Real-time Main Page refresh: the Habit object is already
+          // updated above; just notify the still-open Main Page to rebuild
+          // now, instead of waiting for this screen to be popped.
+          widget.onHabitChanged?.call();
         },
       ),
     );
@@ -4150,6 +4173,9 @@ class _HabitBottomSheet extends StatefulWidget {
   final void Function(HabitState) onStateChanged;
   final void Function(String) onNoteChanged;
   final VoidCallback onDelete;
+  // Optional: forwarded into EditHabitScreen so the Main Page (the widget
+  // that opened this sheet) can rebuild live while Edit is still open.
+  final VoidCallback? onHabitChanged;
   const _HabitBottomSheet({
     required this.habit,
     required this.allHabits,
@@ -4157,6 +4183,7 @@ class _HabitBottomSheet extends StatefulWidget {
     required this.onStateChanged,
     required this.onNoteChanged,
     required this.onDelete,
+    this.onHabitChanged,
   });
   @override State<_HabitBottomSheet> createState() => _HabitBottomSheetState();
 }
@@ -4251,16 +4278,26 @@ class _HabitBottomSheetState extends State<_HabitBottomSheet> {
   }
 
   void _openEdit() {
-    Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+    // Capture the root navigator BEFORE closing this bottom sheet, since
+    // this widget's context will be unmounted immediately after pop().
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    // Close the Habit bottom sheet first so it is no longer part of the
+    // navigation stack underneath the Edit page. This ensures that when
+    // Back is pressed on the Edit page, it returns straight to the
+    // already-alive Main Page instead of momentarily revealing the Habit
+    // bottom sheet/navigation bar.
+    Navigator.pop(context);
+    rootNav.push(
+      _noAnimationEditRoute(
         builder: (_) => EditHabitScreen(
           habit: widget.habit,
           allHabits: widget.allHabits,
           onDelete: widget.onDelete,
+          onHabitChanged: widget.onHabitChanged,
         ),
       ),
     ).then((_) {
-      if (mounted) setState(() {});
+      widget.onHabitChanged?.call();
     });
   }
 
@@ -5673,6 +5710,7 @@ class _HabitAnimatedList extends StatefulWidget {
   final void Function(String) onTap;
   final void Function(String) onDismiss;
   final void Function(String) onLongPress;
+  final VoidCallback? onNeedsRefresh;
   const _HabitAnimatedList({
     required this.habits,
     required this.selectedDay,
@@ -5682,6 +5720,7 @@ class _HabitAnimatedList extends StatefulWidget {
     required this.onTap,
     required this.onDismiss,
     required this.onLongPress,
+    this.onNeedsRefresh,
   });
   @override State<_HabitAnimatedList> createState() => _HabitAnimatedListState();
 }
@@ -5765,6 +5804,7 @@ class _HabitAnimatedListState extends State<_HabitAnimatedList> {
             habit: habit,
             allHabits: widget.onLongPress == null ? const [] : [],
             maxReveal: _editRevealWidth,
+            onNeedsRefresh: widget.onNeedsRefresh,
             child: GestureDetector(
               onTap: () => widget.onTap(habit.id),
               onLongPress: () => widget.onLongPress(habit.id),
@@ -5807,7 +5847,8 @@ class _SwipeEditRow extends StatefulWidget {
   final List<Habit> allHabits;
   final Widget child;
   final double maxReveal;
-  const _SwipeEditRow({required this.habit, required this.allHabits, required this.child, this.maxReveal = 90.0});
+  final VoidCallback? onNeedsRefresh;
+  const _SwipeEditRow({required this.habit, required this.allHabits, required this.child, this.maxReveal = 90.0, this.onNeedsRefresh});
   @override State<_SwipeEditRow> createState() => _SwipeEditRowState();
 }
 
@@ -5848,11 +5889,14 @@ class _SwipeEditRowState extends State<_SwipeEditRow> with SingleTickerProviderS
 
   void _openEdit() {
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+      _noAnimationEditRoute(
         builder: (_) => EditHabitScreen(
           habit: widget.habit,
           allHabits: widget.allHabits,
           onDelete: () {},
+          // Same callback already used post-pop; reused here so the Main
+          // Page also rebuilds live, while the Edit page is still open.
+          onHabitChanged: widget.onNeedsRefresh,
         ),
       ),
     ).then((_) {
@@ -5860,6 +5904,7 @@ class _SwipeEditRowState extends State<_SwipeEditRow> with SingleTickerProviderS
         _navigated = false;
         _animateTo(0);
       }
+      widget.onNeedsRefresh?.call();
     });
   }
 
@@ -5928,7 +5973,7 @@ class _HabitsCardBottomSheetState extends State<_HabitsCardBottomSheet> {
   void _navigateToEdit(BuildContext context) {
     Navigator.pop(context);
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+      _noAnimationEditRoute(
         builder: (_) => EditHabitScreen(
           habit: widget.habit,
           allHabits: widget.allHabits,
@@ -6278,7 +6323,7 @@ class _ArchivedCardBottomSheetState extends State<_ArchivedCardBottomSheet> {
   void _navigateToEdit(BuildContext context) {
     Navigator.pop(context);
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+      _noAnimationEditRoute(
         builder: (_) => EditHabitScreen(
           habit: widget.habit,
           allHabits: widget.allHabits,
@@ -8997,8 +9042,13 @@ class _HabitHomePageState extends State<HabitHomePage> {
         onDelete: () {
           setState(() => deleteHabitEverywhere(_all, id));
         },
+        onHabitChanged: () {
+          if (mounted) setState(() {});
+        },
       ),
-    );
+    ).then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _add()async{
@@ -9260,6 +9310,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
               onTap:_cycle,
               onDismiss:(id)=>setState(()=>deleteHabitEverywhere(_all, id)),
               onLongPress:_longPress,
+              onNeedsRefresh: () { if (mounted) setState(() {}); },
             )),
       ])),
       floatingActionButton:GestureDetector(onTap:_add,child:Container(width:54,height:54,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:const Icon(Icons.add,color:Colors.white,size:26))),
