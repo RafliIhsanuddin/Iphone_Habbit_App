@@ -459,6 +459,28 @@ class ReminderService {
   Future<void> cancelNativeAlarmSoundPublic(String habitId) =>
       _cancelNativeAlarmSound(habitId);
 
+  /// Shows a native system notification confirming the snooze action,
+  /// reusing the existing flutter_local_notifications setup (same plugin
+  /// instance and notification channel as other reminders). Replaces the
+  /// previous in-app SnackBar confirmation.
+  Future<void> showSnoozeConfirmationNotification(int minutes) async {
+    const androidDetails = AndroidNotificationDetails(
+      _notifChannelId,
+      'Habit Notifications',
+      channelDescription: 'Reminders for your habits',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const iosDetails = DarwinNotificationDetails();
+    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    await _plugin.show(
+      'snooze_confirmation'.hashCode & 0x7fffffff,
+      'Snoozed',
+      'Snooze for $minutes ${minutes == 1 ? "minute" : "minutes"}',
+      details,
+    );
+  }
+
   // ── Notification channel ids (Android) ──
   static const _notifChannelId = 'habit_notification_channel';
   static const _alarmChannelId = 'habit_alarm_channel';

@@ -66,11 +66,9 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
       type: 'alarm',
       minutesFromNow: minutes,
     );
+    await ReminderService.instance.showSnoozeConfirmationNotification(minutes);
     if (mounted) {
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Snooze for $minutes minutes')),
-      );
     }
   }
 
