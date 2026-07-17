@@ -17,7 +17,7 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show MethodChannel, PlatformException;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException, SystemNavigator;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -464,12 +464,13 @@ class ReminderService {
   /// the Snooze Page.
   Future<void> moveAppToBackground() async {
     try {
-      await _alarmChannel.invokeMethod('moveToBackground');
+      await _alarmChannel.invokeMethod('exitApp');
     } on PlatformException catch (e) {
       debugPrint('moveAppToBackground failed: $e');
     } catch (e) {
       debugPrint('moveAppToBackground failed: $e');
     }
+    SystemNavigator.pop(animated: false);
   }
 
   /// Shows a native, transient, system-level popup (Android Toast / closest
@@ -661,6 +662,10 @@ class ReminderService {
     required int minutesFromNow,
   }) async {
     final id = _notifId(habitId, reminderTime);
+    // Preserve the habit title across snooze cycles so that if the app
+    // process is later killed and restarted before the postponed alarm
+    // fires again, the cached title is still available as a fallback.
+    rememberHabitTitle(habitId, habitTitle);
     final target =
         tz.TZDateTime.now(tz.local).add(Duration(minutes: minutesFromNow));
     final payload = ReminderPayload(

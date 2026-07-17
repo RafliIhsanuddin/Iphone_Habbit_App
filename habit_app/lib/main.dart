@@ -131,7 +131,8 @@ void main() async {
   ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) {
     final match = _rootHabits.where((h) => h.id == habitId);
     final category = match.isNotEmpty ? match.first.category : '';
-    return SnoozePage(habitId: habitId, habitTitle: habitTitle, habitCategory: category);
+    final title = match.isNotEmpty ? match.first.title : habitTitle;
+    return SnoozePage(habitId: habitId, habitTitle: title, habitCategory: category);
   };
 
   runApp(HabitApp(webPreviewSnooze: kIsWeb));
