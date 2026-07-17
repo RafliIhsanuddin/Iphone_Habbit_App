@@ -101,6 +101,15 @@ class MainActivity : FlutterActivity() {
                             result.error("STOP_ALARM_FAILED", e.message, null)
                         }
                     }
+                    "showSnoozeToast" -> {
+                        try {
+                            val message = call.argument<String>("message") ?: ""
+                            android.widget.Toast.makeText(applicationContext, message, android.widget.Toast.LENGTH_SHORT).show()
+                            result.success(null)
+                        } catch (e: Exception) {
+                            result.error("SHOW_SNOOZE_TOAST_FAILED", e.message, null)
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

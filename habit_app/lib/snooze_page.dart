@@ -66,10 +66,11 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
       type: 'alarm',
       minutesFromNow: minutes,
     );
-    await ReminderService.instance.showSnoozeConfirmationNotification(minutes);
     if (mounted) {
       Navigator.of(context).pop();
     }
+    await ReminderService.instance.moveAppToBackground();
+    await ReminderService.instance.showSnoozeConfirmationNotification(minutes);
   }
 
   // Displays the Habit Name inside the top rectangular box.
@@ -227,6 +228,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                 await ReminderService.instance.stopAlarmSound(habitId);
                 await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
                 if (context.mounted) Navigator.of(context).pop();
+                await ReminderService.instance.moveAppToBackground();
               },
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),

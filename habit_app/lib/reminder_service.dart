@@ -459,26 +459,34 @@ class ReminderService {
   Future<void> cancelNativeAlarmSoundPublic(String habitId) =>
       _cancelNativeAlarmSound(habitId);
 
-  /// Shows a native system notification confirming the snooze action,
-  /// reusing the existing flutter_local_notifications setup (same plugin
-  /// instance and notification channel as other reminders). Replaces the
-  /// previous in-app SnackBar confirmation.
+  /// Moves the app to the background (returns to the device home screen)
+  /// without terminating the process. Used after Snooze/Dismiss actions on
+  /// the Snooze Page.
+  Future<void> moveAppToBackground() async {
+    try {
+      await _alarmChannel.invokeMethod('moveToBackground');
+    } on PlatformException catch (e) {
+      debugPrint('moveAppToBackground failed: $e');
+    } catch (e) {
+      debugPrint('moveAppToBackground failed: $e');
+    }
+  }
+
+  /// Shows a native, transient, system-level popup (Android Toast / closest
+  /// native equivalent) confirming the snooze action. This is NOT an in-app
+  /// dialog, NOT a Flutter overlay, and does NOT remain inside the app —
+  /// it is shown via the same native MethodChannel already used for the
+  /// alarm sound, so it appears even after the app has moved to the
+  /// background / device home screen is shown.
   Future<void> showSnoozeConfirmationNotification(int minutes) async {
-    const androidDetails = AndroidNotificationDetails(
-      _notifChannelId,
-      'Habit Notifications',
-      channelDescription: 'Reminders for your habits',
-      importance: Importance.high,
-      priority: Priority.high,
-    );
-    const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
-    await _plugin.show(
-      'snooze_confirmation'.hashCode & 0x7fffffff,
-      'Snoozed',
-      'Snooze for $minutes ${minutes == 1 ? "minute" : "minutes"}',
-      details,
-    );
+    final message = 'Snooze for $minutes ${minutes == 1 ? "minute" : "minutes"}';
+    try {
+      await _alarmChannel.invokeMethod('showSnoozeToast', {'message': message});
+    } on PlatformException catch (e) {
+      debugPrint('showSnoozeToast failed: $e');
+    } catch (e) {
+      debugPrint('showSnoozeToast failed: $e');
+    }
   }
 
   // ── Notification channel ids (Android) ──
