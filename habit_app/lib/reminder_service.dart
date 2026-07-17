@@ -187,6 +187,12 @@ class ReminderService {
       onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
     );
 
+    // Start the continuous alarm sound immediately whenever an Alarm-type
+    // notification is presented to the user (foreground/background), not
+    // only when the user taps or interacts with it. This reuses the exact
+    // same playAlarmSound() implementation (same sound, same looping, same
+    // audio player, same volume) already used by SnoozePage and the tap
+    // handler above.
     _initialized = true;
   }
 
@@ -253,6 +259,13 @@ class ReminderService {
       return;
     }
 
+    if (payload.type == 'alarm') {
+      // Ensure the continuous alarm sound is already playing (idempotent
+      // no-op if already started) regardless of which action button was
+      // pressed, since the notification itself may have started it.
+      playAlarmSound(payload.habitId);
+    }
+
     switch (actionId) {
       case ReminderActionIds.done:
         // Tandai habit selesai hari ini — persis seperti menekan DONE di app.
@@ -266,6 +279,7 @@ class ReminderService {
         // pada action DISMISS; panggilan cancel() di sini untuk jaga-jaga.)
         if (payload.type == 'alarm') {
           stopAlarmSound(payload.habitId);
+          _cancelNativeAlarmSound(payload.habitId);
         }
         _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
         break;
@@ -285,6 +299,7 @@ class ReminderService {
       case ReminderActionIds.snooze:
         // Jadwalkan ulang alarm sesuai Postpone Interval dari Settings.
         stopAlarmSound(payload.habitId);
+        _cancelNativeAlarmSound(payload.habitId);
         final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
         rescheduleSingleInMinutes(
           habitId: payload.habitId,
@@ -307,6 +322,12 @@ class ReminderService {
     if (nav == null) return;
 
     if (payload.type == 'alarm') {
+      // Start the looping alarm sound immediately, the moment the alarm
+      // reminder fires / is interacted with — do not wait for SnoozePage
+      // to open. playAlarmSound() is idempotent (safe no-op if already
+      // playing for this habit), so this never causes double playback
+      // when SnoozePage's own initState also calls it.
+      playAlarmSound(payload.habitId);
       final builder = buildSnoozeRoute;
       if (builder == null) return;
       nav.push(MaterialPageRoute(
@@ -400,6 +421,43 @@ class ReminderService {
       _activeAlarmHabitIds.remove(habitId);
     }
   }
+
+  /// Schedules the native alarm sound (same MediaPlayer/RingtoneManager
+  /// implementation as playAlarmSound) to start on its own, independent of
+  /// any notification-tap callback, at the same moment the alarm reminder
+  /// notification is scheduled to appear. This makes the alarm sound begin
+  /// as soon as the notification is delivered, even in background/killed
+  /// app state, before the Snooze Page is opened. Uses the exact same
+  /// native player as playAlarmSound — no duplicate playback implementation.
+  Future<void> _scheduleNativeAlarmSound(String habitId, DateTime triggerAt) async {
+    try {
+      await _alarmChannel.invokeMethod('scheduleNativeAlarmSound', {
+        'habitId': habitId,
+        'triggerAtMillis': triggerAt.millisecondsSinceEpoch,
+      });
+    } on PlatformException catch (e) {
+      debugPrint('scheduleNativeAlarmSound failed for $habitId: $e');
+    } catch (e) {
+      debugPrint('scheduleNativeAlarmSound failed for $habitId: $e');
+    }
+  }
+
+  /// Cancels a pending native alarm-sound trigger scheduled by
+  /// _scheduleNativeAlarmSound. Safe no-op if none is pending.
+  Future<void> _cancelNativeAlarmSound(String habitId) async {
+    try {
+      await _alarmChannel.invokeMethod('cancelNativeAlarmSound', {'habitId': habitId});
+    } on PlatformException catch (e) {
+      debugPrint('cancelNativeAlarmSound failed for $habitId: $e');
+    } catch (e) {
+      debugPrint('cancelNativeAlarmSound failed for $habitId: $e');
+    }
+  }
+
+  /// Public wrapper so SnoozePage (outside this file) can cancel a pending
+  /// native alarm-sound trigger using the same private implementation.
+  Future<void> cancelNativeAlarmSoundPublic(String habitId) =>
+      _cancelNativeAlarmSound(habitId);
 
   // ── Notification channel ids (Android) ──
   static const _notifChannelId = 'habit_notification_channel';
@@ -557,6 +615,7 @@ class ReminderService {
               UILocalNotificationDateInterpretation.absoluteTime,
           matchDateTimeComponents: DateTimeComponents.time,
         );
+        await _scheduleNativeAlarmSound(habitId, scheduledDate);
       }
     }
   }
@@ -593,6 +652,9 @@ class ReminderService {
       // Tidak pakai matchDateTimeComponents di sini karena ini SEKALI jalan
       // (postpone/snooze 10 menit), bukan pengulangan harian.
     );
+    if (type == 'alarm') {
+      await _scheduleNativeAlarmSound(habitId, target);
+    }
   }
 }
 

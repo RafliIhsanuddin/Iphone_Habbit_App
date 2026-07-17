@@ -58,6 +58,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     _snoozeTriggered = true;
     final minutes = PostponeIntervalStore.minutes;
     await ReminderService.instance.stopAlarmSound(habitId);
+    await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
     await ReminderService.instance.rescheduleSingleInMinutes(
       habitId: habitId,
       habitTitle: _displayedHabitTitle,
@@ -226,6 +227,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
               behavior: HitTestBehavior.opaque,
               onTap: () async {
                 await ReminderService.instance.stopAlarmSound(habitId);
+                await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
                 if (context.mounted) Navigator.of(context).pop();
               },
               child: Container(
