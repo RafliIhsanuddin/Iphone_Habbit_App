@@ -103,6 +103,12 @@ class ReminderService {
   /// tahu struktur internal _HabitHomePageState.
   static void Function(String habitId)? onMarkDone;
 
+  /// Optional callback set by main.dart to persist the current habit list
+  /// before the app is moved to the background (e.g. from the Snooze
+  /// Page's Snooze/Dismiss actions), so in-memory data survives a possible
+  /// OS-initiated process kill while backgrounded.
+  static Future<void> Function()? onAppBackgrounding;
+
   /// Callback opsional untuk membangun halaman Habit (home) dan Snooze page,
   /// di-set dari main.dart. Dipisah dari import langsung supaya file ini
   /// tetap tidak circular-import ke main.dart.
@@ -464,12 +470,20 @@ class ReminderService {
   /// the Snooze Page.
   Future<void> moveAppToBackground() async {
     try {
-      await _alarmChannel.invokeMethod('exitApp');
+      await onAppBackgrounding?.call();
     } on PlatformException catch (e) {
       debugPrint('moveAppToBackground failed: $e');
     } catch (e) {
       debugPrint('moveAppToBackground failed: $e');
     }
+
+    // NOTE: Intentionally do NOT invoke a native 'exitApp' method here.
+    // That call was forcing a full native process termination instead of
+    // simply moving the task to the background, which wiped all in-memory
+    // habit data (habits are only held in memory, not persisted to disk).
+    // SystemNavigator.pop alone moves the app to the background/Home
+    // Screen while keeping the Dart process (and its in-memory state)
+    // alive, so previously saved habits are preserved when reopening.
     SystemNavigator.pop(animated: false);
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:async';
 import 'reminder_service.dart';
 import 'snooze_page.dart';
+import 'dart:convert';
 
 // ─────────────────────────────────────────────────────────────
 // No-animation route used specifically for opening the Edit screen
@@ -114,6 +115,101 @@ void deleteHabitEverywhere(List<Habit> allHabits, String habitId) {
 
 final List<Habit> _rootHabits = [];
 
+extension HabitJsonCodec on Habit {
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'category': category,
+        'description': description,
+        'priority': priority,
+        'reminders': reminders
+            .map((r) => {
+                  'time': r.time,
+                  'type': r.type,
+                  'schedule': r.schedule,
+                  'weekDays': r.weekDays.toList(),
+                  'daysBefore': r.daysBefore,
+                })
+            .toList(),
+        'startDate': startDate.toIso8601String(),
+        'endDate': endDate?.toIso8601String(),
+        'isArchived': isArchived,
+        'archivedAt': archivedAt?.toIso8601String(),
+        'frequency': frequency,
+        'dailyState': dailyState.map((k, v) => MapEntry(k, v.index)),
+        'dailyNote': dailyNote,
+        'freqWeekDays': freqWeekDays,
+        'freqMonthDays': freqMonthDays.toList(),
+        'freqYearDays': freqYearDays.map((d) => d.toIso8601String()).toList(),
+        'freqPeriodDays': freqPeriodDays,
+        'freqPeriodUnit': freqPeriodUnit,
+        'freqRepeatEvery': freqRepeatEvery,
+        'freqFlexible': freqFlexible,
+      };
+
+  static Habit fromJson(Map<String, dynamic> j) {
+    final h = Habit(
+      id: j['id'] as String,
+      title: j['title'] as String? ?? '',
+      category: j['category'] as String? ?? '',
+      description: j['description'] as String? ?? '',
+      priority: j['priority'] as int? ?? 1,
+      reminders: ((j['reminders'] as List?) ?? [])
+          .map((r) => ReminderEntry(
+                time: r['time'] as String? ?? '12:00',
+                type: r['type'] as String? ?? 'notification',
+                schedule: r['schedule'] as String? ?? 'always',
+                weekDays: Set<String>.from(r['weekDays'] ?? const []),
+                daysBefore: r['daysBefore'] as int? ?? 1,
+              ))
+          .toList(),
+      startDate: DateTime.tryParse(j['startDate'] as String? ?? '') ?? DateTime.now(),
+      endDate: j['endDate'] != null ? DateTime.tryParse(j['endDate'] as String) : null,
+      isArchived: j['isArchived'] as bool? ?? false,
+      archivedAt: j['archivedAt'] != null ? DateTime.tryParse(j['archivedAt'] as String) : null,
+      frequency: j['frequency'] as String? ?? 'EVERY DAY',
+      freqWeekDays: (j['freqWeekDays'] as Map?)?.map((k, v) => MapEntry(k as String, v as bool)),
+      freqMonthDays: Set<int>.from(j['freqMonthDays'] ?? const []),
+      freqYearDays: ((j['freqYearDays'] as List?) ?? [])
+          .map((d) => DateTime.tryParse(d as String) ?? DateTime.now())
+          .toList(),
+      freqPeriodDays: j['freqPeriodDays'] as int? ?? 1,
+      freqPeriodUnit: j['freqPeriodUnit'] as String? ?? 'WEEK',
+      freqRepeatEvery: j['freqRepeatEvery'] as int? ?? 1,
+      freqFlexible: j['freqFlexible'] as bool? ?? false,
+    );
+    final ds = (j['dailyState'] as Map?) ?? {};
+    ds.forEach((k, v) => h.dailyState[k as String] = HabitState.values[v as int]);
+    final dn = (j['dailyNote'] as Map?) ?? {};
+    dn.forEach((k, v) => h.dailyNote[k as String] = v as String);
+    return h;
+  }
+}
+
+class HabitStore {
+  static const _key = 'saved_habits_v1';
+
+  static Future<void> save(List<Habit> habits) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = habits.map((h) => h.toJson()).toList();
+    await prefs.setString(_key, jsonEncode(list));
+  }
+
+  static Future<List<Habit>> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List;
+      return list
+          .map((e) => HabitJsonCodec.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+}
+
 void main() async {
   List<Habit> _snoozeLookupHabits = [];
   WidgetsFlutterBinding.ensureInitialized();
@@ -123,6 +219,9 @@ void main() async {
   ]);
   await CategoryStore.init();
   await PostponeIntervalStore.init();
+
+  _rootHabits.addAll(await HabitStore.load());
+  ReminderService.onAppBackgrounding = () => HabitStore.save(_rootHabits);
 
   await ReminderService.instance.init();
   await ReminderService.instance.requestPermissions();
