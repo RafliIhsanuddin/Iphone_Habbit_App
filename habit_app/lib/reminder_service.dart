@@ -416,6 +416,14 @@ class ReminderService {
   /// habit, this is a safe no-op — it never creates a duplicate playback.
   Future<void> playAlarmSound(String habitId) async {
     if (_activeAlarmHabitIds.contains(habitId)) return;
+    // Only one alarm may play at a time — the newest triggered alarm takes
+    // priority over any currently playing alarm. Stop all others first.
+    if (_activeAlarmHabitIds.isNotEmpty) {
+      final othersToStop = List<String>.from(_activeAlarmHabitIds);
+      for (final otherId in othersToStop) {
+        await stopAlarmSound(otherId);
+      }
+    }
     _activeAlarmHabitIds.add(habitId);
     try {
       await _alarmChannel.invokeMethod('playAlarm', {'habitId': habitId});

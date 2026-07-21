@@ -19,6 +19,14 @@ class MainActivity : FlutterActivity() {
         fun startNativeAlarmSound(context: android.content.Context, habitId: String) {
             try {
                 if (!activePlayers.containsKey(habitId)) {
+                    // Only one alarm may play at a time — stop any other
+                    // currently playing alarm before starting this one.
+                    val othersToStop = activePlayers.keys.filter { it != habitId }
+                    for (otherId in othersToStop) {
+                        activePlayers.remove(otherId)?.apply {
+                            try { stop(); release() } catch (_: Exception) {}
+                        }
+                    }
                     val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(
                         context, RingtoneManager.TYPE_ALARM
                     ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
