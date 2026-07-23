@@ -106,10 +106,23 @@ void deleteHabitEverywhere(List<Habit> allHabits, String habitId) {
   final idx = allHabits.indexWhere((h) => h.id == habitId);
   if (idx == -1) return;
   final target = allHabits[idx];
+  // Cancel only THIS habit's own scheduled notifications/alarms —
+  // per-habit, independent of every other habit's own state.
   ReminderService.instance.cancelAllForHabit(
     target.id,
     target.reminders.map((r) => r.time).toList(),
   );
+  // Also stop this habit's own audible alarm (if currently sounding),
+  // cancel its own pending native alarm-sound trigger, and clear its
+  // own Snooze Page tracking — never touching any other habit's alarm,
+  // queue position, or Snooze Page.
+  ReminderService.instance.stopAlarmSound(target.id);
+  ReminderService.instance.cancelNativeAlarmSoundPublic(target.id);
+  ReminderService.clearActiveSnoozeHabitIdIfMatches(target.id);
+  // If another habit's alarm was queued behind this one, let it resume
+  // on its own — this only ever plays the newest *remaining* alarm and
+  // never affects habits unrelated to the one being deleted.
+  ReminderService.instance.resumeNewestRemainingAlarm();
   allHabits.removeWhere((h) => h.id == habitId);
 }
 
@@ -227,11 +240,11 @@ void main() async {
   await ReminderService.instance.requestPermissions();
   ReminderService.navigatorKey = appNavigatorKey;
   ReminderService.getSnoozeMinutes = () => PostponeIntervalStore.minutes;
-  ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle) {
+  ReminderService.buildSnoozeRoute = (ctx, habitId, habitTitle, habitCategory, reminderTime) {
     final match = _rootHabits.where((h) => h.id == habitId);
-    final category = match.isNotEmpty ? match.first.category : '';
+    final category = match.isNotEmpty ? match.first.category : habitCategory;
     final title = match.isNotEmpty ? match.first.title : habitTitle;
-    return SnoozePage(habitId: habitId, habitTitle: title, habitCategory: category);
+    return SnoozePage(key: ValueKey('snooze_${habitId}_$reminderTime'), habitId: habitId, habitTitle: title, habitCategory: category, reminderTime: reminderTime);
   };
 
   runApp(HabitApp(webPreviewSnooze: kIsWeb));
@@ -3565,10 +3578,24 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
                         onTap: () {
-                          Navigator.pop(context); // close dialog
+                          // Close only the confirm dialog first.
+                          Navigator.pop(context);
+                          // Delete this habit only — its own reminders,
+                          // alarm, and Snooze Page tracking are cleaned up
+                          // inside deleteHabitEverywhere(), independent of
+                          // every other habit.
                           widget.onDelete();
-                          Navigator.pop(context); // close edit screen
-                          Navigator.pop(context); // close bottom sheet
+                          // Regardless of how this Edit screen was opened
+                          // (bottom sheet -> Edit, swipe -> Edit, card menu
+                          // -> Edit, calendar toggle -> Edit — each path has
+                          // a different number of routes stacked beneath
+                          // it), always land back on the Main Page. Popping
+                          // a fixed number of times assumed one specific
+                          // path and could pop past the Main Page into a
+                          // black screen on the others. popUntil(isFirst)
+                          // is correct for every path.
+                          Navigator.of(context, rootNavigator: true)
+                              .popUntil((route) => route.isFirst);
                         },
                         child: Container(
                           width: double.infinity,
@@ -3643,6 +3670,7 @@ class _EditHabitScreenState extends State<EditHabitScreen> {
           ReminderService.instance.rescheduleHabit(
             habitId: widget.habit.id,
             habitTitle: widget.habit.title,
+            habitCategory: widget.habit.category,
             previousTimes: previousTimes,
             currentReminders: updated
                 .map((r) => ReminderInput(time: r.time, type: r.type))
@@ -9191,6 +9219,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
       ReminderService.instance.rescheduleHabit(
         habitId: newHabit.id,
         habitTitle: newHabit.title,
+        habitCategory: newHabit.category,
         previousTimes: const [],
         currentReminders: newHabit.reminders
             .map((r) => ReminderInput(time: r.time, type: r.type))

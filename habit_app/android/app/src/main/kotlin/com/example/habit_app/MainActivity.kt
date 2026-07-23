@@ -16,6 +16,10 @@ class MainActivity : FlutterActivity() {
     companion object {
         val activePlayers = HashMap<String, MediaPlayer>()
 
+        fun startAlarmPlaybackStatic(context: android.content.Context, habitId: String) {
+            startNativeAlarmSound(context, habitId)
+        }
+
         fun startNativeAlarmSound(context: android.content.Context, habitId: String) {
             try {
                 if (!activePlayers.containsKey(habitId)) {

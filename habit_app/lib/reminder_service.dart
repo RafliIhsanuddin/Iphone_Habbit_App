@@ -113,8 +113,28 @@ class ReminderService {
   /// di-set dari main.dart. Dipisah dari import langsung supaya file ini
   /// tetap tidak circular-import ke main.dart.
   static Widget Function(BuildContext context)? buildHabitHomeRoute;
-  static Widget Function(BuildContext context, String habitId, String habitTitle)?
+  static Widget Function(BuildContext context, String habitId, String habitTitle, String habitCategory, String reminderTime)?
       buildSnoozeRoute;
+
+      /// Tracks which Habit's Snooze Page is currently on top of the
+      /// navigation stack (if any), so that when a NEWER alarm's Snooze Page
+      /// needs to open, the previous Habit's Snooze Page (which belongs only
+      /// to that other Habit) can be removed first instead of stacking
+      /// multiple independent Snooze Pages on top of each other.
+    static String? _activeSnoozeHabitId;
+
+      /// Exact Route object for the currently open Snooze Page (if any).
+      /// Storing the Route itself (rather than just the habitId) lets us
+      /// remove precisely that page from the navigation stack — regardless
+      /// of its position — instead of assuming it is on top, which was
+      /// unsafe whenever a Snooze Page was not actually the topmost route.
+    static Route<dynamic>? _activeSnoozeRoute;
+
+      /// Ordered list of habitIds whose alarm sound is currently active,
+      /// oldest-triggered first, newest-triggered last. Used to determine
+      /// which alarm should automatically resume after the currently
+      /// playing one is dismissed or snoozed.
+    static final List<String> _activeAlarmOrder = [];
 
   /// Dipanggil sekali di awal, sebelum runApp() — mirip CategoryStore.init().
   Future<void> init() async {
@@ -286,6 +306,11 @@ class ReminderService {
         if (payload.type == 'alarm') {
           stopAlarmSound(payload.habitId);
           _cancelNativeAlarmSound(payload.habitId);
+          // This Habit's own alarm session ends here; only its own
+          // Snooze Page tracking (if any) is cleared, and only the
+          // newest remaining pending alarm (if any) is resumed.
+          clearActiveSnoozeHabitIdIfMatches(payload.habitId);
+          resumeNewestRemainingAlarm();
         }
         _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
         break;
@@ -315,6 +340,12 @@ class ReminderService {
           minutesFromNow: snoozeMinutes,
         );
         _showConfirmationToast('Snooze for $snoozeMinutes ${snoozeMinutes == 1 ? "minute" : "minutes"}');
+        // This Habit's own alarm session is now snoozed; only its own
+        // Snooze Page tracking (if any) is cleared, and only the newest
+        // remaining pending alarm (if any) is resumed — this Habit will
+        // re-enter the queue on its own once its snooze timer fires again.
+        clearActiveSnoozeHabitIdIfMatches(payload.habitId);
+        resumeNewestRemainingAlarm();
         break;
     }
   }
@@ -336,9 +367,55 @@ class ReminderService {
       playAlarmSound(payload.habitId);
       final builder = buildSnoozeRoute;
       if (builder == null) return;
-      nav.push(MaterialPageRoute(
-        builder: (ctx) => builder(ctx, payload.habitId, _lastKnownHabitTitle(payload.habitId)),
-      ));
+
+      // If a different Habit's Snooze Page is currently open, close it
+      // first. Each Habit owns its own independent Snooze Page/alarm
+      // session, so the older Habit's page must never remain underneath
+      // (and must never be reused) when a newer Habit's alarm takes over.
+      // Removing the exact stored Route (rather than assuming it is on top
+      // of the stack) guarantees only that other Habit's own Snooze Page
+      // is affected, regardless of navigation stack position.
+      if (_activeSnoozeHabitId != null &&
+          _activeSnoozeHabitId != payload.habitId &&
+          _activeSnoozeRoute != null) {
+        try {
+          nav.removeRoute(_activeSnoozeRoute!);
+        } catch (_) {}
+        _activeSnoozeRoute = null;
+      }
+
+      // Snapshot this Habit's own title AND category together, right
+      // before opening its Snooze Page, so the page can never end up
+      // rendering a mix of this Habit's title with a stale/other Habit's
+      // category or vice versa.
+      final thisHabitTitleForRoute = _lastKnownHabitTitle(payload.habitId);
+      final thisHabitCategoryForRoute = _lastKnownHabitCategory(payload.habitId);
+
+      final thisHabitId = payload.habitId;
+      final thisReminderTimeForRoute = payload.reminderTime;
+      _activeSnoozeHabitId = thisHabitId;
+      late final Route<dynamic> thisRoute;
+      thisRoute = MaterialPageRoute(
+        settings: RouteSettings(name: 'snooze_page_$thisHabitId'),
+        builder: (ctx) => builder(
+          ctx,
+          thisHabitId,
+          thisHabitTitleForRoute,
+          thisHabitCategoryForRoute,
+          thisReminderTimeForRoute,
+        ),
+      );
+      _activeSnoozeRoute = thisRoute;
+      nav.push(thisRoute).then((_) {
+        // Only clear if this Habit's page is still the recorded active one
+        // (it may already have been replaced by a newer Habit's alarm).
+        if (_activeSnoozeHabitId == thisHabitId) {
+          _activeSnoozeHabitId = null;
+        }
+        if (_activeSnoozeRoute == thisRoute) {
+          _activeSnoozeRoute = null;
+        }
+      });
     } else {
       // Notification → langsung ke Habit page (halaman utama), tanpa
       // menumpuk halaman lain di atasnya.
@@ -355,8 +432,19 @@ class ReminderService {
     _habitTitleCache[habitId] = title;
   }
 
+  // Per-habit category cache, kept fully independent from
+  // _habitTitleCache so one Habit's Snooze Page can never end up
+  // displaying another Habit's category.
+  final Map<String, String> _habitCategoryCache = {};
+  void rememberHabitCategory(String habitId, String category) {
+    _habitCategoryCache[habitId] = category;
+  }
+
   String _lastKnownHabitTitle(String habitId) =>
       _habitTitleCache[habitId] ?? '';
+
+  String _lastKnownHabitCategory(String habitId) =>
+      _habitCategoryCache[habitId] ?? '';
 
   /// Menampilkan pesan konfirmasi singkat ala platform (mis. "Postponed for
   /// 10 minutes"). Karena ReminderService tidak selalu punya BuildContext
@@ -401,6 +489,7 @@ class ReminderService {
   /// Safe to call even if no alarm sound is playing.
   Future<void> stopAlarmSound(String habitId) async {
     if (!_activeAlarmHabitIds.remove(habitId)) return;
+    _activeAlarmOrder.remove(habitId);
     try {
       await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
     } on PlatformException catch (e) {
@@ -410,6 +499,33 @@ class ReminderService {
     }
   }
 
+  /// Stops the audible alarm sound for [habitId] WITHOUT removing it from
+  /// the pending alarm queue (_activeAlarmOrder). Used only when an alarm
+  /// is superseded by a newer alarm taking priority — the superseded
+  /// habit's own Snooze Page/notification/alarm state remains fully
+  /// intact and eligible to automatically resume later once the newer
+  /// alarm(s) are dismissed or snoozed.
+  Future<void> _stopAlarmSoundKeepQueued(String habitId) async {
+    if (!_activeAlarmHabitIds.remove(habitId)) return;
+    try {
+      await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
+    } on PlatformException catch (e) {
+      debugPrint('stopAlarmSound (keepQueued) failed for $habitId: $e');
+    } catch (e) {
+      debugPrint('stopAlarmSound (keepQueued) failed for $habitId: $e');
+    }
+  }
+
+  /// After the currently playing alarm has been stopped (via Dismiss or
+  /// Snooze on its own Snooze Page), determine the newest remaining active
+  /// Alarm reminder (if any) and resume only that one. Older alarms are
+  /// never resumed unless they become the newest remaining active reminder.
+  Future<void> resumeNewestRemainingAlarm() async {
+    if (_activeAlarmOrder.isEmpty) return;
+    final nextHabitId = _activeAlarmOrder.last;
+    await playAlarmSound(nextHabitId);
+  }
+
   /// Starts the looping alarm sound for the given habit, using the phone's
   /// actual default alarm sound (RingtoneManager.TYPE_ALARM) played on the
   /// alarm audio stream via native Android code. If already active for this
@@ -417,22 +533,29 @@ class ReminderService {
   Future<void> playAlarmSound(String habitId) async {
     if (_activeAlarmHabitIds.contains(habitId)) return;
     // Only one alarm may play at a time — the newest triggered alarm takes
-    // priority over any currently playing alarm. Stop all others first.
+    // priority over any currently playing alarm. Stop all others' audible
+    // playback only; they remain in the pending alarm queue so they can
+    // automatically resume later, per each habit's own independent alarm
+    // lifecycle.
     if (_activeAlarmHabitIds.isNotEmpty) {
       final othersToStop = List<String>.from(_activeAlarmHabitIds);
       for (final otherId in othersToStop) {
-        await stopAlarmSound(otherId);
+        await _stopAlarmSoundKeepQueued(otherId);
       }
     }
     _activeAlarmHabitIds.add(habitId);
+    _activeAlarmOrder.remove(habitId);
+    _activeAlarmOrder.add(habitId);
     try {
       await _alarmChannel.invokeMethod('playAlarm', {'habitId': habitId});
     } on PlatformException catch (e) {
       debugPrint('playAlarmSound failed for $habitId: $e');
       _activeAlarmHabitIds.remove(habitId);
+      _activeAlarmOrder.remove(habitId);
     } catch (e) {
       debugPrint('playAlarmSound failed for $habitId: $e');
       _activeAlarmHabitIds.remove(habitId);
+      _activeAlarmOrder.remove(habitId);
     }
   }
 
@@ -468,10 +591,21 @@ class ReminderService {
     }
   }
 
+  Future<void> cancelNativeAlarmSoundPublic(String habitId) async {
+    await _cancelNativeAlarmSound(habitId);
+  }
+
   /// Public wrapper so SnoozePage (outside this file) can cancel a pending
   /// native alarm-sound trigger using the same private implementation.
-  Future<void> cancelNativeAlarmSoundPublic(String habitId) =>
-      _cancelNativeAlarmSound(habitId);
+  /// Public helper so SnoozePage (outside this file) can clear the
+  /// "active Snooze Page" tracking for its own Habit only, when the user
+  /// presses Snooze/Dismiss — without touching any other Habit's state.
+  static void clearActiveSnoozeHabitIdIfMatches(String habitId) {
+    if (_activeSnoozeHabitId == habitId) {
+      _activeSnoozeHabitId = null;
+      _activeSnoozeRoute = null;
+    }
+  }
 
   /// Moves the app to the background (returns to the device home screen)
   /// without terminating the process. Used after Snooze/Dismiss actions on
@@ -591,10 +725,20 @@ class ReminderService {
   }
 
   /// Batalkan SEMUA slot reminder milik satu habit (dipanggil saat habit
-  /// dihapus, atau sebelum reschedule penuh).
+  /// dihapus, atau sebelum reschedule penuh). Only this habitId's own
+  /// notification ids are touched — every other habit's scheduled
+  /// notifications/alarms remain completely untouched.
   Future<void> cancelAllForHabit(String habitId, List<String> times) async {
     for (final t in times) {
       await cancelReminderSlot(habitId, t);
+      // Each reminder slot may also have its own pending native alarm
+      // sound trigger (scheduled via AlarmManager, independent of the
+      // flutter_local_notifications notification). Cancel that too so a
+      // deleted habit's alarm sound can never fire after the habit and
+      // its notification are gone. This only cancels the PendingIntent
+      // registered under this exact habitId — it cannot affect any
+      // other habit's own pending alarm trigger.
+      await _cancelNativeAlarmSound(habitId);
     }
   }
 
@@ -615,12 +759,14 @@ class ReminderService {
   Future<void> rescheduleHabit({
     required String habitId,
     required String habitTitle,
+    required String habitCategory,
     required List<String> previousTimes,
     required List<ReminderInput> currentReminders,
   }) async {
     // Simpan judul terbaru supaya action handler (DONE/POSTPONED/SNOOZE)
     // bisa menampilkan nama habit yang benar meski dipanggil belakangan.
     rememberHabitTitle(habitId, habitTitle);
+    rememberHabitCategory(habitId, habitCategory);
 
     // 1. Bersihkan jadwal lama
     await cancelAllForHabit(habitId, previousTimes);

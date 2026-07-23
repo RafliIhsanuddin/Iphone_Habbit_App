@@ -20,7 +20,8 @@ class SnoozePage extends StatefulWidget {
   final String habitId;
   final String habitTitle;
   final String habitCategory;
-  const SnoozePage({super.key, required this.habitId, required this.habitTitle, required this.habitCategory});
+  final String reminderTime;
+  const SnoozePage({required Key key, required this.habitId, required this.habitTitle, required this.habitCategory, this.reminderTime = ''}) : super(key: key);
 
   @override
   State<SnoozePage> createState() => _SnoozePageState();
@@ -57,16 +58,21 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     if (_snoozeTriggered) return;
     _snoozeTriggered = true;
     final minutes = PostponeIntervalStore.minutes;
+    // Only stop/cancel/reschedule THIS Habit's own alarm session — never
+    // another Habit's, even if this page was opened while a different
+    // Habit's alarm was mid-flight.
     await ReminderService.instance.stopAlarmSound(habitId);
     await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
     await ReminderService.instance.rescheduleSingleInMinutes(
       habitId: habitId,
       habitTitle: _displayedHabitTitle,
-      reminderTime: _currentTimeLabel(),
+      reminderTime: widget.reminderTime.isNotEmpty ? widget.reminderTime : _currentTimeLabel(),
       type: 'alarm',
       minutesFromNow: minutes,
     );
     await ReminderService.instance.showSnoozeConfirmationNotification(minutes);
+    ReminderService.clearActiveSnoozeHabitIdIfMatches(habitId);
+    await ReminderService.instance.resumeNewestRemainingAlarm();
     await ReminderService.instance.moveAppToBackground();
   }
 
@@ -81,6 +87,9 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     final m = now.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
+
+  String get _displayedAlarmTime =>
+      widget.reminderTime.isNotEmpty ? widget.reminderTime : _currentTimeLabel();
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +113,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                   Transform.translate(
                     offset: const Offset(0, _timeNumberYOffset),
                     child: Text(
-                      _currentTimeLabel(),
+                      _displayedAlarmTime,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: _timeNumberFontSize,
@@ -224,8 +233,14 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
               onTap: () async {
                 await ReminderService.instance.stopAlarmSound(habitId);
                 await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
+                if (widget.reminderTime.isNotEmpty) {
+                  await ReminderService.instance.cancelReminderSlot(habitId, widget.reminderTime);
+                }
+                ReminderService.clearActiveSnoozeHabitIdIfMatches(habitId);
+                await ReminderService.instance.resumeNewestRemainingAlarm();
                 await ReminderService.instance.moveAppToBackground();
               },
+
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                 width: double.infinity,
