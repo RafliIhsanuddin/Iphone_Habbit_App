@@ -246,8 +246,21 @@ void main() async {
     final title = match.isNotEmpty ? match.first.title : habitTitle;
     return SnoozePage(key: ValueKey('snooze_${habitId}_$reminderTime'), habitId: habitId, habitTitle: title, habitCategory: category, reminderTime: reminderTime);
   };
-
   runApp(HabitApp(webPreviewSnooze: kIsWeb));
+
+  // IMPORTANT: this must run AFTER runApp(), not before. navigatorKey's
+  // Navigator widget does not exist yet until the widget tree from
+  // runApp() has actually been built — calling this earlier means
+  // navigatorKey.currentState is still null, so _handleBodyTap() silently
+  // no-ops and the app is left showing the default Main Page instead of
+  // routing to the tapped alarm's own Snooze Page. Scheduling it for the
+  // end of the first frame guarantees the Navigator is mounted first, so
+  // a cold-start tap on any Habit's Alarm notification (e.g. Painting,
+  // while Running's own Snooze Page had already been closed) correctly
+  // routes straight to that Habit's own Snooze Page.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    ReminderService.instance.consumePendingLaunchNotification();
+  });
 }
 
 class HabitApp extends StatelessWidget {

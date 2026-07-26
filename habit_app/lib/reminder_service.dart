@@ -130,6 +130,12 @@ class ReminderService {
       /// unsafe whenever a Snooze Page was not actually the topmost route.
     static Route<dynamic>? _activeSnoozeRoute;
 
+      /// Per-habit Snooze Page route tracking, so multiple independent
+      /// Snooze Page sessions (one per Habit) can each be reopened by
+      /// their own notification tap, independent of whichever Snooze
+      /// Page happens to be topmost right now.
+    static final Map<String, Route<dynamic>> _snoozeRoutesByHabitId = {};
+
       /// Ordered list of habitIds whose alarm sound is currently active,
       /// oldest-triggered first, newest-triggered last. Used to determine
       /// which alarm should automatically resume after the currently
@@ -233,6 +239,34 @@ class ReminderService {
     if (habitId == null) return;
     await prefs.remove('pending_mark_done_habit_id');
     onMarkDone?.call(habitId);
+  }
+
+  /// Handles the case where the app process was not running (or its
+  /// Activity had been fully removed from the recent tasks) and the user
+  /// tapped a specific Habit's Alarm notification to (re)launch the app.
+  /// flutter_local_notifications does NOT automatically replay this tap
+  /// through onDidReceiveNotificationResponse — it must be queried
+  /// explicitly via getNotificationAppLaunchDetails(). Without this, a
+  /// cold-start tap on, e.g., the Painting notification would land on the
+  /// default Main Page instead of Painting's own Snooze Page, even though
+  /// Painting's alarm session is still fully active. Must be called only
+  /// after navigatorKey and buildSnoozeRoute are assigned in main().
+  Future<void> consumePendingLaunchNotification() async {
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return;
+    final response = details.notificationResponse;
+    if (response == null) return;
+    final payload = ReminderPayload.decode(response.payload);
+    if (payload == null) return;
+    final actionId = response.actionId;
+    if (actionId == null || actionId.isEmpty) {
+      // Same routing as a live body tap: alarm → that Habit's own Snooze
+      // Page; notification → Main Page. Never falls back to Main Page
+      // when this is in fact a valid active alarm session.
+      _handleBodyTap(payload);
+    } else {
+      _onNotificationResponse(response);
+    }
   }
 
   /// Minta izin notifikasi (Android 13+/POST_NOTIFICATIONS, iOS alert/sound/badge)
@@ -368,21 +402,12 @@ class ReminderService {
       final builder = buildSnoozeRoute;
       if (builder == null) return;
 
-      // If a different Habit's Snooze Page is currently open, close it
-      // first. Each Habit owns its own independent Snooze Page/alarm
-      // session, so the older Habit's page must never remain underneath
-      // (and must never be reused) when a newer Habit's alarm takes over.
-      // Removing the exact stored Route (rather than assuming it is on top
-      // of the stack) guarantees only that other Habit's own Snooze Page
-      // is affected, regardless of navigation stack position.
-      if (_activeSnoozeHabitId != null &&
-          _activeSnoozeHabitId != payload.habitId &&
-          _activeSnoozeRoute != null) {
-        try {
-          nav.removeRoute(_activeSnoozeRoute!);
-        } catch (_) {}
-        _activeSnoozeRoute = null;
-      }
+      // Each Habit owns its own completely independent Snooze Page
+      // session (Rule 2). A different Habit's currently open Snooze Page
+      // must never be removed, replaced, or otherwise touched here —
+      // doing so would destroy that Habit's independent session. Simply
+      // proceed to open THIS Habit's own Snooze Page below; any other
+      // Habit's Snooze Page (if open) is left completely untouched.
 
       // Snapshot this Habit's own title AND category together, right
       // before opening its Snooze Page, so the page can never end up
@@ -394,6 +419,13 @@ class ReminderService {
       final thisHabitId = payload.habitId;
       final thisReminderTimeForRoute = payload.reminderTime;
       _activeSnoozeHabitId = thisHabitId;
+
+      // If THIS habit already has its own tracked Snooze Page route
+      // (e.g. it was previously pushed then covered by another habit's
+      // alarm), reuse/re-surface that same per-habit tracking slot
+      // instead of losing track of it — each habit's own Snooze Page
+      // session must remain independently trackable so its own
+      // notification can always reopen it.
       late final Route<dynamic> thisRoute;
       thisRoute = MaterialPageRoute(
         settings: RouteSettings(name: 'snooze_page_$thisHabitId'),
@@ -406,6 +438,7 @@ class ReminderService {
         ),
       );
       _activeSnoozeRoute = thisRoute;
+      _snoozeRoutesByHabitId[thisHabitId] = thisRoute;
       nav.push(thisRoute).then((_) {
         // Only clear if this Habit's page is still the recorded active one
         // (it may already have been replaced by a newer Habit's alarm).
@@ -414,6 +447,9 @@ class ReminderService {
         }
         if (_activeSnoozeRoute == thisRoute) {
           _activeSnoozeRoute = null;
+        }
+        if (_snoozeRoutesByHabitId[thisHabitId] == thisRoute) {
+          _snoozeRoutesByHabitId.remove(thisHabitId);
         }
       });
     } else {

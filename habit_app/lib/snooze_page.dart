@@ -1,16 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-// snooze_page.dart
-//
-// Halaman yang dibuka saat compact alarm notification di-tap
-// LANGSUNG (bukan lewat expand). Bergaya sama dengan halaman lain
-// di app (background hitam, font bold uppercase).
-//
-// Ini HANYA UI + aksi SNOOZE/DISMISS di dalam app — action button
-// pada notifikasi expanded (DISMISS/SNOOZE) sudah ditangani lewat
-// ReminderService, terpisah dari halaman ini. Halaman ini dibuka
-// ketika user tap body alarm sebelum sempat expand.
-// ─────────────────────────────────────────────────────────────
-
 import 'package:flutter/material.dart';
 import 'reminder_service.dart';
 import 'main.dart' show PostponeIntervalStore;
