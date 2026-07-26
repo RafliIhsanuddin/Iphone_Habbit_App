@@ -246,7 +246,15 @@ void main() async {
     final title = match.isNotEmpty ? match.first.title : habitTitle;
     return SnoozePage(key: ValueKey('snooze_${habitId}_$reminderTime'), habitId: habitId, habitTitle: title, habitCategory: category, reminderTime: reminderTime);
   };
-  runApp(HabitApp(webPreviewSnooze: kIsWeb));
+  // Determine BEFORE runApp() whether this cold start was caused by the
+  // user tapping an active Alarm notification's body. Resolving this here
+  // (instead of only after runApp() via consumePendingLaunchNotification)
+  // lets that specific Habit's own Snooze Page be used directly as
+  // MaterialApp.home, so the Main Page is never built/shown for even one
+  // frame — fixing the previous bug where the Main Page flashed before the
+  // correct Snooze Page (e.g. Painting's) appeared.
+  final initialSnoozeWidget = await ReminderService.instance.buildInitialSnoozeRouteIfLaunched();
+  runApp(HabitApp(webPreviewSnooze: kIsWeb, initialSnoozeWidget: initialSnoozeWidget));
 
   // IMPORTANT: this must run AFTER runApp(), not before. navigatorKey's
   // Navigator widget does not exist yet until the widget tree from
@@ -258,14 +266,21 @@ void main() async {
   // a cold-start tap on any Habit's Alarm notification (e.g. Painting,
   // while Running's own Snooze Page had already been closed) correctly
   // routes straight to that Habit's own Snooze Page.
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    ReminderService.instance.consumePendingLaunchNotification();
-  });
+  // Skip this fallback entirely when buildInitialSnoozeRouteIfLaunched()
+  // already resolved and is being used as MaterialApp.home above —
+  // otherwise this would handle the exact same launch a second time and
+  // push a duplicate Snooze Page on top of the one already shown as home.
+  if (initialSnoozeWidget == null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ReminderService.instance.consumePendingLaunchNotification();
+    });
+  }
 }
 
 class HabitApp extends StatelessWidget {
-  const HabitApp({super.key, this.webPreviewSnooze = false});
+  const HabitApp({super.key, this.webPreviewSnooze = false, this.initialSnoozeWidget});
   final bool webPreviewSnooze;
+  final Widget? initialSnoozeWidget;
   @override
   Widget build(BuildContext context) => MaterialApp(
         navigatorKey: appNavigatorKey,
@@ -289,7 +304,7 @@ class HabitApp extends StatelessWidget {
             ),
           );
         },
-        home: HabitHomePage(habits: _rootHabits),
+        home: initialSnoozeWidget ?? HabitHomePage(habits: _rootHabits),
       );
 }
 

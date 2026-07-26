@@ -269,6 +269,42 @@ class ReminderService {
     }
   }
 
+
+  /// Determines, BEFORE runApp() is called, whether this cold start of the
+  /// app was caused specifically by the user tapping the body of an active
+  /// Alarm notification (not an action button, not a Notification-type
+  /// reminder). If so, returns the Widget for that exact Habit's own
+  /// Snooze Page so it can be used directly as MaterialApp.home — meaning
+  /// the Main Page is never built or shown, not even for a single frame.
+  /// Returns null for every other launch case, in which case the caller
+  /// should fall back to its normal home widget and rely on
+  /// consumePendingLaunchNotification()/_onNotificationResponse() instead.
+  Future<Widget?> buildInitialSnoozeRouteIfLaunched() async {
+    final details = await _plugin.getNotificationAppLaunchDetails();
+    if (details == null || !details.didNotificationLaunchApp) return null;
+    final response = details.notificationResponse;
+    if (response == null) return null;
+    final actionId = response.actionId;
+    if (actionId != null && actionId.isNotEmpty) return null;
+    final payload = ReminderPayload.decode(response.payload);
+    if (payload == null || payload.type != 'alarm') return null;
+    final builder = buildSnoozeRoute;
+    if (builder == null) return null;
+    playAlarmSound(payload.habitId);
+    final title = _lastKnownHabitTitle(payload.habitId);
+    final category = _lastKnownHabitCategory(payload.habitId);
+    _activeSnoozeHabitId = payload.habitId;
+    return Builder(
+      builder: (ctx) => builder(
+        ctx,
+        payload.habitId,
+        title,
+        category,
+        payload.reminderTime,
+      ),
+    );
+  }
+
   /// Minta izin notifikasi (Android 13+/POST_NOTIFICATIONS, iOS alert/sound/badge)
   /// dan izin exact alarm (Android 12+/SCHEDULE_EXACT_ALARM).
   /// Dipanggil dari UI (misal saat user pertama kali membuat reminder),
@@ -427,9 +463,11 @@ class ReminderService {
       // session must remain independently trackable so its own
       // notification can always reopen it.
       late final Route<dynamic> thisRoute;
-      thisRoute = MaterialPageRoute(
+      thisRoute = PageRouteBuilder(
         settings: RouteSettings(name: 'snooze_page_$thisHabitId'),
-        builder: (ctx) => builder(
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+        pageBuilder: (ctx, animation, secondaryAnimation) => builder(
           ctx,
           thisHabitId,
           thisHabitTitleForRoute,
