@@ -903,16 +903,24 @@ class ReminderService {
     required String type, // 'notification' | 'alarm'
     required int minutesFromNow,
   }) async {
-    final id = _notifId(habitId, reminderTime);
+    final target =
+        tz.TZDateTime.now(tz.local).add(Duration(minutes: minutesFromNow));
+    // For Alarm reminders, the scheduled trigger time changes on every
+    // snooze; the notification id and payload must reflect this new
+    // current scheduled time so the notification bar, the Snooze Page,
+    // and the next scheduled alarm all stay synchronized (Alarm only —
+    // Notification reminders keep using the original reminderTime).
+    final effectiveTime = type == 'alarm'
+        ? '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}'
+        : reminderTime;
+    final id = _notifId(habitId, effectiveTime);
     // Preserve the habit title across snooze cycles so that if the app
     // process is later killed and restarted before the postponed alarm
     // fires again, the cached title is still available as a fallback.
     rememberHabitTitle(habitId, habitTitle);
-    final target =
-        tz.TZDateTime.now(tz.local).add(Duration(minutes: minutesFromNow));
     final payload = ReminderPayload(
       habitId: habitId,
-      reminderTime: reminderTime,
+      reminderTime: effectiveTime,
       type: type,
     ).encode();
 

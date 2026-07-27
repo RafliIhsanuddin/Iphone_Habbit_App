@@ -50,6 +50,10 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     // Habit's alarm was mid-flight.
     await ReminderService.instance.stopAlarmSound(habitId);
     await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
+    await ReminderService.instance.cancelReminderSlot(
+      habitId,
+      widget.reminderTime.isNotEmpty ? widget.reminderTime : _currentTimeLabel(),
+    );
     await ReminderService.instance.rescheduleSingleInMinutes(
       habitId: habitId,
       habitTitle: _displayedHabitTitle,
