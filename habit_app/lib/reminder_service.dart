@@ -402,6 +402,7 @@ class ReminderService {
         stopAlarmSound(payload.habitId);
         _cancelNativeAlarmSound(payload.habitId);
         final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
+        _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
         rescheduleSingleInMinutes(
           habitId: payload.habitId,
           habitTitle: _lastKnownHabitTitle(payload.habitId),
@@ -607,11 +608,16 @@ class ReminderService {
   /// habit, this is a safe no-op — it never creates a duplicate playback.
   Future<void> playAlarmSound(String habitId) async {
     if (_activeAlarmHabitIds.contains(habitId)) return;
-    // NOTE: Deliberately do NOT stop any other habit's currently playing
-    // alarm here. Each habit's alarm must ring fully independently and
-    // concurrently — it only stops when THAT habit's own Dismiss/Snooze
-    // is pressed (or the habit is deleted). As long as at least one
-    // habit's alarm hasn't been resolved, its sound keeps playing.
+    // Only one alarm sound may be audible at any time (Rule 1 & 2): the
+    // newest triggered alarm owns the audio. Stop any other currently
+    // sounding alarm's audio WITHOUT resolving or dequeuing it — it
+    // remains an active session and will automatically resume (Rule 3)
+    // once this newer alarm is snoozed/dismissed.
+    for (final otherId in List<String>.from(_activeAlarmHabitIds)) {
+      if (otherId != habitId) {
+        await _stopAlarmSoundKeepQueued(otherId);
+      }
+    }
     _activeAlarmHabitIds.add(habitId);
     _activeAlarmOrder.remove(habitId);
     _activeAlarmOrder.add(habitId);
@@ -774,6 +780,11 @@ class ReminderService {
       enableVibration: true,
       ongoing: true,
       autoCancel: false,
+      // Rule 1: an Alarm notification must not be removable by a manual
+      // swipe (left, right, or otherwise). ongoing:true already blocks
+      // this on Android; explicitly setting onlyAlertOnce false + leaving
+      // autoCancel/ongoing as-is is intentional — no swipe-to-dismiss
+      // path is enabled for this channel.
       actions: [
         AndroidNotificationAction(ReminderActionIds.dismiss, 'DISMISS',
             cancelNotification: true),

@@ -21,12 +21,24 @@ class MainActivity : FlutterActivity() {
         fun startNativeAlarmSound(context: android.content.Context, habitId: String) {
             try {
                 if (!activePlayers.containsKey(habitId)) {
-                    // NOTE: Deliberately do NOT stop any other habit's currently
-                    // playing alarm here. Each habit's alarm sound must run fully
-                    // independently and concurrently — it only stops when THAT
-                    // habit's own Dismiss/Snooze is pressed (or the habit is
-                    // deleted). With two simultaneous habit alarms, both must
-                    // keep ringing together until each is individually resolved.
+                    // Only one alarm sound may be audible at any given moment
+                    // (Rule 1 & 2): stop any other habit's currently playing
+                    // native alarm sound before starting this one. This does
+                    // NOT resolve/cancel the other habit's alarm session — it
+                    // only silences its audio; the Dart-side queue
+                    // (_activeAlarmOrder) still tracks it as active/unresolved
+                    // and will resume it automatically once this newer alarm
+                    // is dismissed/snoozed.
+                    for ((otherId, otherPlayer) in activePlayers) {
+                        if (otherId != habitId) {
+                            try {
+                                otherPlayer.stop()
+                                otherPlayer.release()
+                            } catch (e: Exception) {
+                            }
+                        }
+                    }
+                    activePlayers.keys.filter { it != habitId }.forEach { activePlayers.remove(it) }
                     val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(
                         context, RingtoneManager.TYPE_ALARM
                     ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
