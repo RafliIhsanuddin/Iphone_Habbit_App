@@ -562,8 +562,9 @@ class ReminderService {
   /// Stops any currently playing alarm sound for the given habit, if any.
   /// Safe to call even if no alarm sound is playing.
   Future<void> stopAlarmSound(String habitId) async {
-    if (!_activeAlarmHabitIds.remove(habitId)) return;
+    final bool wasAudible = _activeAlarmHabitIds.remove(habitId);
     _activeAlarmOrder.remove(habitId);
+    if (!wasAudible) return;
     try {
       await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
     } on PlatformException catch (e) {
@@ -606,17 +607,11 @@ class ReminderService {
   /// habit, this is a safe no-op — it never creates a duplicate playback.
   Future<void> playAlarmSound(String habitId) async {
     if (_activeAlarmHabitIds.contains(habitId)) return;
-    // Only one alarm may play at a time — the newest triggered alarm takes
-    // priority over any currently playing alarm. Stop all others' audible
-    // playback only; they remain in the pending alarm queue so they can
-    // automatically resume later, per each habit's own independent alarm
-    // lifecycle.
-    if (_activeAlarmHabitIds.isNotEmpty) {
-      final othersToStop = List<String>.from(_activeAlarmHabitIds);
-      for (final otherId in othersToStop) {
-        await _stopAlarmSoundKeepQueued(otherId);
-      }
-    }
+    // NOTE: Deliberately do NOT stop any other habit's currently playing
+    // alarm here. Each habit's alarm must ring fully independently and
+    // concurrently — it only stops when THAT habit's own Dismiss/Snooze
+    // is pressed (or the habit is deleted). As long as at least one
+    // habit's alarm hasn't been resolved, its sound keeps playing.
     _activeAlarmHabitIds.add(habitId);
     _activeAlarmOrder.remove(habitId);
     _activeAlarmOrder.add(habitId);
@@ -793,6 +788,47 @@ class ReminderService {
   }
 
   /// Batalkan satu slot reminder (dipakai internal & juga dipanggil langsung
+  
+
+  /// Notification details used ONLY when re-scheduling an Alarm reminder
+  /// after a Snooze (Rule 2–4). Unlike _alarmDetails() (used for the very
+  /// first alarm trigger, Rule 1, which must keep auto-opening the Snooze
+  /// Page via fullScreenIntent), this variant must NOT auto-launch the
+  /// Snooze Page when the snooze timer expires. It only shows a regular,
+  /// tappable notification; the Snooze Page is opened later, only when the
+  /// user taps it, via the existing _handleBodyTap() routing.
+  NotificationDetails _alarmSnoozeDetails() {
+    const androidDetails = AndroidNotificationDetails(
+      _alarmChannelId,
+      'Habit Alarms',
+      channelDescription: 'Alarms for your habits',
+      importance: Importance.max,
+      priority: Priority.high,
+      // No full-screen intent here: this must never automatically open
+      // the Snooze Page when the snooze timer expires (Rule 3). It must
+      // behave like a normal notification the user taps.
+      fullScreenIntent: false,
+      category: AndroidNotificationCategory.alarm,
+      playSound: false,
+      audioAttributesUsage: AudioAttributesUsage.alarm,
+      enableVibration: true,
+      ongoing: true,
+      autoCancel: false,
+      actions: [
+        AndroidNotificationAction(ReminderActionIds.dismiss, 'DISMISS',
+            cancelNotification: true),
+        AndroidNotificationAction(ReminderActionIds.snooze, 'SNOOZE'),
+      ],
+    );
+    const iosDetails = DarwinNotificationDetails(
+      categoryIdentifier: ReminderCategoryIds.alarm,
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+    return const NotificationDetails(android: androidDetails, iOS: iosDetails);
+  }
+
+
+
   /// misalnya kalau habit dihapus seluruhnya).
   Future<void> cancelReminderSlot(String habitId, String time) async {
     await _plugin.cancel(_notifId(habitId, time));
@@ -929,7 +965,7 @@ class ReminderService {
       habitTitle,
       null,
       target,
-      type == 'alarm' ? _alarmDetails() : _notificationDetails(),
+      type == 'alarm' ? _alarmSnoozeDetails() : _notificationDetails(),
       payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:

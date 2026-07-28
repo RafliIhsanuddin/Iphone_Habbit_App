@@ -3,8 +3,6 @@ package com.example.habit_app
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
-import android.app.NotificationManager
-import android.app.NotificationChannel
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,14 +21,12 @@ class MainActivity : FlutterActivity() {
         fun startNativeAlarmSound(context: android.content.Context, habitId: String) {
             try {
                 if (!activePlayers.containsKey(habitId)) {
-                    // Only one alarm may play at a time — stop any other
-                    // currently playing alarm before starting this one.
-                    val othersToStop = activePlayers.keys.filter { it != habitId }
-                    for (otherId in othersToStop) {
-                        activePlayers.remove(otherId)?.apply {
-                            try { stop(); release() } catch (_: Exception) {}
-                        }
-                    }
+                    // NOTE: Deliberately do NOT stop any other habit's currently
+                    // playing alarm here. Each habit's alarm sound must run fully
+                    // independently and concurrently — it only stops when THAT
+                    // habit's own Dismiss/Snooze is pressed (or the habit is
+                    // deleted). With two simultaneous habit alarms, both must
+                    // keep ringing together until each is individually resolved.
                     val alarmUri = RingtoneManager.getActualDefaultRingtoneUri(
                         context, RingtoneManager.TYPE_ALARM
                     ) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -52,6 +48,32 @@ class MainActivity : FlutterActivity() {
             } catch (e: Exception) {
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // THE FIX:
+    // By default, Flutter's SystemNavigator.pop() calls Activity.finish(),
+    // which destroys this Activity and fires onDestroy() below.
+    // onDestroy() stops/releases ALL entries in activePlayers — not just
+    // the one habit that was just dismissed/snoozed.
+    //
+    // With two simultaneous habit alarms this caused exactly the bug
+    // reported: dismiss/snooze Habit A → resumeNewestRemainingAlarm()
+    // starts Habit B's alarm sound → moveAppToBackground() calls
+    // SystemNavigator.pop() → Activity.finish() → onDestroy() clears
+    // activePlayers → Habit B's just-started alarm is killed too, even
+    // though B was never dismissed/snoozed.
+    //
+    // Overriding popSystemNavigator() to call moveTaskToBack() instead
+    // means SystemNavigator.pop() only backgrounds the app (like the
+    // Home button) — the Activity, its MediaPlayer instances, and the
+    // Dart process's in-memory state all stay alive. Any habit whose
+    // alarm hasn't been dismissed/snoozed keeps ringing exactly as
+    // intended, and onDestroy() only fires on a real app close/kill.
+    // ─────────────────────────────────────────────────────────────
+    override fun popSystemNavigator(): Boolean {
+        moveTaskToBack(true)
+        return true
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -128,6 +150,9 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        // Only fires now on a genuine app close/kill (task swiped away,
+        // OS reclaiming memory, etc.) — no longer on every dismiss/snooze,
+        // since popSystemNavigator() above no longer calls finish().
         activePlayers.values.forEach {
             try { it.stop(); it.release() } catch (_: Exception) {}
         }
@@ -135,3 +160,5 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 }
+
+
