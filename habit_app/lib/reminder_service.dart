@@ -142,6 +142,18 @@ class ReminderService {
       /// playing one is dismissed or snoozed.
     static final List<String> _activeAlarmOrder = [];
 
+      /// SharedPreferences key used to persist the unresolved alarm queue
+      /// (same order as _activeAlarmOrder, newest-last) so that Rule 1
+      /// (resume the next unresolved Snooze Page on launch) still works
+      /// even if the app process was fully killed and _activeAlarmOrder
+      /// was reset to empty on this fresh instance.
+    static const String _unresolvedQueueKey = 'unresolved_alarm_queue_v1';
+
+      /// Per-habit reminderTime cache for currently-unresolved alarms,
+      /// used only to persist enough info to rebuild a Snooze Page after
+      /// a cold start.
+    static final Map<String, String> _alarmReminderTimeCache = {};
+
   /// Dipanggil sekali di awal, sebelum runApp() — mirip CategoryStore.init().
   Future<void> init() async {
     if (_initialized) return;
@@ -219,6 +231,25 @@ class ReminderService {
       onDidReceiveBackgroundNotificationResponse: _onBackgroundNotificationResponse,
     );
 
+    // Rule 1/3/4: when the native side starts an alarm's sound directly
+    // (e.g. via the AlarmManager-triggered native path, independent of a
+    // notification tap), make sure this habit is also registered in the
+    // Dart-side unresolved-alarm queue. Without this, an alarm that fires
+    // natively while another alarm is already playing would never be
+    // added to _activeAlarmOrder/_activeAlarmHabitIds, so dismissing or
+    // snoozing the currently playing alarm could fail to resume this one
+    // (or fail to actually stop it), even though its own session was
+    // never resolved.
+    _alarmChannel.setMethodCallHandler((call) async {
+      if (call.method == 'nativeAlarmFired') {
+        final args = call.arguments;
+        final habitId = args is Map ? args['habitId'] as String? : null;
+        if (habitId != null && habitId.isNotEmpty) {
+          await playAlarmSound(habitId);
+        }
+      }
+    });
+
     // Start the continuous alarm sound immediately whenever an Alarm-type
     // notification is presented to the user (foreground/background), not
     // only when the user taps or interacts with it. This reuses the exact
@@ -260,6 +291,13 @@ class ReminderService {
     if (payload == null) return;
     final actionId = response.actionId;
     if (actionId == null || actionId.isEmpty) {
+      // Guard against a stale/replayed launch Intent from an alarm
+      // notification that has already been fully resolved (Snoozed or
+      // Dismissed). Only route to that Habit's own Snooze Page if it is
+      // still actually present in the unresolved alarm queue.
+      if (payload.type == 'alarm' && !_activeAlarmOrder.contains(payload.habitId)) {
+        return;
+      }
       // Same routing as a live body tap: alarm → that Habit's own Snooze
       // Page; notification → Main Page. Never falls back to Main Page
       // when this is in fact a valid active alarm session.
@@ -281,15 +319,35 @@ class ReminderService {
   /// consumePendingLaunchNotification()/_onNotificationResponse() instead.
   Future<Widget?> buildInitialSnoozeRouteIfLaunched() async {
     final details = await _plugin.getNotificationAppLaunchDetails();
-    if (details == null || !details.didNotificationLaunchApp) return null;
+    if (details == null || !details.didNotificationLaunchApp) {
+      return _buildInitialSnoozeRouteFromPersistedQueue();
+    }
     final response = details.notificationResponse;
-    if (response == null) return null;
+    if (response == null) return _buildInitialSnoozeRouteFromPersistedQueue();
     final actionId = response.actionId;
-    if (actionId != null && actionId.isNotEmpty) return null;
+    if (actionId != null && actionId.isNotEmpty) {
+      return _buildInitialSnoozeRouteFromPersistedQueue();
+    }
     final payload = ReminderPayload.decode(response.payload);
-    if (payload == null || payload.type != 'alarm') return null;
+    if (payload == null || payload.type != 'alarm') {
+      return _buildInitialSnoozeRouteFromPersistedQueue();
+    }
+    // Guard against Android replaying a stale launch Intent from an
+    // already-resolved alarm notification (e.g. tapping the app icon
+    // after every alarm session was already Snoozed/Dismissed). Only
+    // trust this launch-detail payload if that habit is still actually
+    // present in the persisted unresolved queue; otherwise fall through
+    // to the queue-based check, which correctly returns null (Main Page)
+    // when nothing remains unresolved.
+    final prefsCheck = await SharedPreferences.getInstance();
+    final persistedQueueCheck = prefsCheck.getStringList(_unresolvedQueueKey) ?? [];
+    final stillUnresolved = persistedQueueCheck.any((e) => e.split('|').first == payload.habitId);
+    if (!stillUnresolved) {
+      return _buildInitialSnoozeRouteFromPersistedQueue();
+    }
     final builder = buildSnoozeRoute;
-    if (builder == null) return null;
+    if (builder == null) return _buildInitialSnoozeRouteFromPersistedQueue();
+    _alarmReminderTimeCache[payload.habitId] = payload.reminderTime;
     playAlarmSound(payload.habitId);
     final title = _lastKnownHabitTitle(payload.habitId);
     final category = _lastKnownHabitCategory(payload.habitId);
@@ -303,6 +361,44 @@ class ReminderService {
         payload.reminderTime,
       ),
     );
+  }
+
+  /// Rule 1 & 2: whenever the app is launched (regardless of whether the
+  /// launch itself was caused by tapping a specific alarm notification)
+  /// and unresolved alarm sessions still remain, immediately open the
+  /// newest unresolved one's own Snooze Page instead of the Main Page.
+  /// Reads the persisted unresolved-alarm queue so this still works after
+  /// the process was fully killed (in which case _activeAlarmOrder, being
+  /// in-memory only, would otherwise be empty on this fresh instance).
+  Future<Widget?> _buildInitialSnoozeRouteFromPersistedQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    final queue = prefs.getStringList(_unresolvedQueueKey) ?? [];
+    if (queue.isEmpty) return null;
+    final builder = buildSnoozeRoute;
+    if (builder == null) return null;
+    // Newest-last, so the last entry is the next one to resolve (Rule 2).
+    final entry = queue.last;
+    final parts = entry.split('|');
+    final habitId = parts[0];
+    final reminderTime = parts.length > 1 ? parts[1] : '';
+    _alarmReminderTimeCache[habitId] = reminderTime;
+    playAlarmSound(habitId);
+    final title = _lastKnownHabitTitle(habitId);
+    final category = _lastKnownHabitCategory(habitId);
+    _activeSnoozeHabitId = habitId;
+    return Builder(
+      builder: (ctx) => builder(ctx, habitId, title, category, reminderTime),
+    );
+  }
+
+  /// Persists the current unresolved alarm queue so Rule 1 can be honored
+  /// even after the app process is killed.
+  Future<void> _persistUnresolvedQueue() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = _activeAlarmOrder
+        .map((id) => '$id|${_alarmReminderTimeCache[id] ?? ''}')
+        .toList();
+    await prefs.setStringList(_unresolvedQueueKey, list);
   }
 
   /// Minta izin notifikasi (Android 13+/POST_NOTIFICATIONS, iOS alert/sound/badge)
@@ -343,7 +439,7 @@ class ReminderService {
   /// Dipanggil saat notifikasi/alarm di-tap (baik compact tap maupun
   /// tombol action di versi expanded), selama app masih hidup (foreground/
   /// background, bukan fully killed).
-  void _onNotificationResponse(NotificationResponse response) {
+  Future<void> _onNotificationResponse(NotificationResponse response) async {
     final payload = ReminderPayload.decode(response.payload);
     if (payload == null) return;
 
@@ -359,6 +455,7 @@ class ReminderService {
       // Ensure the continuous alarm sound is already playing (idempotent
       // no-op if already started) regardless of which action button was
       // pressed, since the notification itself may have started it.
+      _alarmReminderTimeCache[payload.habitId] = payload.reminderTime;
       playAlarmSound(payload.habitId);
     }
 
@@ -374,13 +471,13 @@ class ReminderService {
         // (Notifikasi sudah otomatis tertutup karena cancelNotification:true
         // pada action DISMISS; panggilan cancel() di sini untuk jaga-jaga.)
         if (payload.type == 'alarm') {
-          stopAlarmSound(payload.habitId);
-          _cancelNativeAlarmSound(payload.habitId);
+          await stopAlarmSound(payload.habitId);
+          await _cancelNativeAlarmSound(payload.habitId);
           // This Habit's own alarm session ends here; only its own
           // Snooze Page tracking (if any) is cleared, and only the
           // newest remaining pending alarm (if any) is resumed.
           clearActiveSnoozeHabitIdIfMatches(payload.habitId);
-          resumeNewestRemainingAlarm();
+          await resumeNewestRemainingAlarm();
         }
         _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
         break;
@@ -399,11 +496,11 @@ class ReminderService {
 
       case ReminderActionIds.snooze:
         // Jadwalkan ulang alarm sesuai Postpone Interval dari Settings.
-        stopAlarmSound(payload.habitId);
-        _cancelNativeAlarmSound(payload.habitId);
+        await stopAlarmSound(payload.habitId);
+        await _cancelNativeAlarmSound(payload.habitId);
         final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
         _plugin.cancel(_notifId(payload.habitId, payload.reminderTime));
-        rescheduleSingleInMinutes(
+        await rescheduleSingleInMinutes(
           habitId: payload.habitId,
           habitTitle: _lastKnownHabitTitle(payload.habitId),
           reminderTime: payload.reminderTime,
@@ -416,7 +513,7 @@ class ReminderService {
         // remaining pending alarm (if any) is resumed — this Habit will
         // re-enter the queue on its own once its snooze timer fires again.
         clearActiveSnoozeHabitIdIfMatches(payload.habitId);
-        resumeNewestRemainingAlarm();
+        await resumeNewestRemainingAlarm();
         break;
     }
   }
@@ -435,6 +532,7 @@ class ReminderService {
       // to open. playAlarmSound() is idempotent (safe no-op if already
       // playing for this habit), so this never causes double playback
       // when SnoozePage's own initState also calls it.
+      _alarmReminderTimeCache[payload.habitId] = payload.reminderTime;
       playAlarmSound(payload.habitId);
       final builder = buildSnoozeRoute;
       if (builder == null) return;
@@ -565,6 +663,7 @@ class ReminderService {
   Future<void> stopAlarmSound(String habitId) async {
     final bool wasAudible = _activeAlarmHabitIds.remove(habitId);
     _activeAlarmOrder.remove(habitId);
+    await _persistUnresolvedQueue();
     if (!wasAudible) return;
     try {
       await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
@@ -602,6 +701,28 @@ class ReminderService {
     await playAlarmSound(nextHabitId);
   }
 
+
+  /// Rule 1 (foreground case): if the app is already running (not a cold
+  /// start) and is brought back to the foreground — e.g. via the app
+  /// switcher or launcher icon, rather than by tapping the alarm
+  /// notification itself — the Main Page must still never be left showing
+  /// while unresolved Alarm sessions remain. This checks the in-memory
+  /// unresolved alarm queue and, if no Snooze Page is already on screen,
+  /// opens the newest unresolved one's own Snooze Page using the exact
+  /// same routing already used for a live notification tap.
+  Future<void> resumeSnoozePageIfUnresolvedAlarmExists() async {
+    if (_activeSnoozeHabitId != null) return;
+    if (_activeAlarmOrder.isEmpty) return;
+    final habitId = _activeAlarmOrder.last;
+    final reminderTime = _alarmReminderTimeCache[habitId] ?? '';
+    final payload = ReminderPayload(
+      habitId: habitId,
+      reminderTime: reminderTime,
+      type: 'alarm',
+    );
+    _handleBodyTap(payload);
+  }
+
   /// Starts the looping alarm sound for the given habit, using the phone's
   /// actual default alarm sound (RingtoneManager.TYPE_ALARM) played on the
   /// alarm audio stream via native Android code. If already active for this
@@ -621,6 +742,7 @@ class ReminderService {
     _activeAlarmHabitIds.add(habitId);
     _activeAlarmOrder.remove(habitId);
     _activeAlarmOrder.add(habitId);
+    await _persistUnresolvedQueue();
     try {
       await _alarmChannel.invokeMethod('playAlarm', {'habitId': habitId});
     } on PlatformException catch (e) {

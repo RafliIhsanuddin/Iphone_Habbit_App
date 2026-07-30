@@ -64,6 +64,9 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     await ReminderService.instance.showSnoozeConfirmationNotification(minutes);
     ReminderService.clearActiveSnoozeHabitIdIfMatches(habitId);
     await ReminderService.instance.resumeNewestRemainingAlarm();
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
     await ReminderService.instance.moveAppToBackground();
   }
 
@@ -229,6 +232,9 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                 }
                 ReminderService.clearActiveSnoozeHabitIdIfMatches(habitId);
                 await ReminderService.instance.resumeNewestRemainingAlarm();
+                if (mounted && Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
                 await ReminderService.instance.moveAppToBackground();
               },
 

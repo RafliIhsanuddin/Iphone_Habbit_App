@@ -14,6 +14,15 @@ class MainActivity : FlutterActivity() {
     companion object {
         val activePlayers = HashMap<String, MediaPlayer>()
 
+        // Reference to the live alarm MethodChannel (set once the Flutter
+        // engine is configured) so the native side can notify Dart the
+        // moment an alarm's sound actually starts playing — even when
+        // triggered via AlarmManager/AlarmSoundReceiver rather than a
+        // notification tap. Null if no engine is currently attached (e.g.
+        // process fully killed); in that case Dart-side queue tracking is
+        // simply skipped and will be reconciled once the app is reopened.
+        var alarmChannel: MethodChannel? = null
+
         fun startAlarmPlaybackStatic(context: android.content.Context, habitId: String) {
             startNativeAlarmSound(context, habitId)
         }
@@ -57,10 +66,13 @@ class MainActivity : FlutterActivity() {
                     }
                     activePlayers[habitId] = mediaPlayer
                 }
+                alarmChannel?.invokeMethod("nativeAlarmFired", mapOf("habitId" to habitId))
             } catch (e: Exception) {
             }
         }
     }
+
+    
 
     // ─────────────────────────────────────────────────────────────
     // THE FIX:
@@ -90,7 +102,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL)
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ALARM_CHANNEL)
+        alarmChannel = channel
+        channel
             .setMethodCallHandler { call, result ->
                 val habitId = call.argument<String>("habitId") ?: ""
                 when (call.method) {

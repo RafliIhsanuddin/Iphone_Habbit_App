@@ -9009,7 +9009,7 @@ class HabitHomePage extends StatefulWidget {
   @override State<HabitHomePage> createState() => _HabitHomePageState();
 }
 
-class _HabitHomePageState extends State<HabitHomePage> {
+class _HabitHomePageState extends State<HabitHomePage> with WidgetsBindingObserver {
   bool _searchOpen=false;
   DateTime _sel=DateTime.now();
   late DateTime _weekStart;
@@ -9022,6 +9022,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _weekStart = _monday(_sel);
     final now = DateTime.now();
     _lastKnownToday = DateTime(now.year, now.month, now.day);
@@ -9030,6 +9031,17 @@ class _HabitHomePageState extends State<HabitHomePage> {
     // Terapkan action DONE yang ditekan saat app sepenuhnya terminated
     // (lihat ReminderService._onBackgroundNotificationResponse).
     ReminderService.instance.consumePendingBackgroundAction();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Rule 1: if the app is brought back to the foreground (e.g. via the
+    // app switcher or launcher icon) while unresolved Alarm sessions still
+    // exist, the Main Page must never remain shown — route to that
+    // Habit's own Snooze Page instead, exactly as a notification tap would.
+    if (state == AppLifecycleState.resumed) {
+      ReminderService.instance.resumeSnoozePageIfUnresolvedAlarmExists();
+    }
   }
 
   void _handleReminderMarkDone(String habitId) {
@@ -9503,6 +9515,7 @@ class _HabitHomePageState extends State<HabitHomePage> {
 
   @override
   void dispose() {
+  WidgetsBinding.instance.removeObserver(this);
   ReminderService.onMarkDone = null;
   _midnightTimer?.cancel();
   _ctrl.dispose();
