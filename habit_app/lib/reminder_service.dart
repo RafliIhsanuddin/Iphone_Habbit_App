@@ -298,10 +298,22 @@ class ReminderService {
       if (payload.type == 'alarm' && !_activeAlarmOrder.contains(payload.habitId)) {
         return;
       }
-      // Same routing as a live body tap: alarm → that Habit's own Snooze
-      // Page; notification → Main Page. Never falls back to Main Page
-      // when this is in fact a valid active alarm session.
-      _handleBodyTap(payload);
+      // Requirement 2: even here, don't necessarily open the tapped
+      // habit's own page — if a newer alarm is active, that one must be
+      // shown instead. Route through the same newest-resolution used by
+      // resumeSnoozePageIfUnresolvedAlarmExists()/_switchSnoozePageToNewestIfNeeded()
+      // rather than trusting payload.habitId directly.
+      if (payload.type == 'alarm' && _activeAlarmOrder.isNotEmpty) {
+        final newestHabitId = _activeAlarmOrder.last;
+        final newestReminderTime = _alarmReminderTimeCache[newestHabitId] ?? '';
+        _handleBodyTap(ReminderPayload(
+          habitId: newestHabitId,
+          reminderTime: newestReminderTime,
+          type: 'alarm',
+        ));
+      } else {
+        _handleBodyTap(payload);
+      }
     } else {
       _onNotificationResponse(response);
     }
@@ -332,35 +344,17 @@ class ReminderService {
     if (payload == null || payload.type != 'alarm') {
       return _buildInitialSnoozeRouteFromPersistedQueue();
     }
-    // Guard against Android replaying a stale launch Intent from an
-    // already-resolved alarm notification (e.g. tapping the app icon
-    // after every alarm session was already Snoozed/Dismissed). Only
-    // trust this launch-detail payload if that habit is still actually
-    // present in the persisted unresolved queue; otherwise fall through
-    // to the queue-based check, which correctly returns null (Main Page)
-    // when nothing remains unresolved.
-    final prefsCheck = await SharedPreferences.getInstance();
-    final persistedQueueCheck = prefsCheck.getStringList(_unresolvedQueueKey) ?? [];
-    final stillUnresolved = persistedQueueCheck.any((e) => e.split('|').first == payload.habitId);
-    if (!stillUnresolved) {
-      return _buildInitialSnoozeRouteFromPersistedQueue();
-    }
-    final builder = buildSnoozeRoute;
-    if (builder == null) return _buildInitialSnoozeRouteFromPersistedQueue();
-    _alarmReminderTimeCache[payload.habitId] = payload.reminderTime;
-    playAlarmSound(payload.habitId);
-    final title = _lastKnownHabitTitle(payload.habitId);
-    final category = _lastKnownHabitCategory(payload.habitId);
-    _activeSnoozeHabitId = payload.habitId;
-    return Builder(
-      builder: (ctx) => builder(
-        ctx,
-        payload.habitId,
-        title,
-        category,
-        payload.reminderTime,
-      ),
-    );
+    // Requirement 2: regardless of WHICH habit's alarm notification was
+    // actually tapped to launch the app, the page shown first must
+    // always be the newest active alarm's own Snooze Page — never the
+    // specific habit named in this particular launch Intent. So instead
+    // of building a route for payload.habitId directly, always defer to
+    // the persisted unresolved queue, which already resolves to the
+    // newest entry. This also naturally handles the stale-launch-Intent
+    // guard: if the tapped habit is no longer unresolved, the queue
+    // check still correctly falls through (e.g. returns null when the
+    // queue is empty, or opens whichever habit is actually newest).
+    return _buildInitialSnoozeRouteFromPersistedQueue();
   }
 
   /// Rule 1 & 2: whenever the app is launched (regardless of whether the
@@ -577,18 +571,27 @@ class ReminderService {
       _activeSnoozeRoute = thisRoute;
       _snoozeRoutesByHabitId[thisHabitId] = thisRoute;
       nav.push(thisRoute).then((_) {
-        // Only clear if this Habit's page is still the recorded active one
-        // (it may already have been replaced by a newer Habit's alarm).
-        if (_activeSnoozeHabitId == thisHabitId) {
-          _activeSnoozeHabitId = null;
-        }
-        if (_activeSnoozeRoute == thisRoute) {
-          _activeSnoozeRoute = null;
-        }
-        if (_snoozeRoutesByHabitId[thisHabitId] == thisRoute) {
-          _snoozeRoutesByHabitId.remove(thisHabitId);
-        }
-      });
+  if (_activeSnoozeHabitId == thisHabitId) {
+    _activeSnoozeHabitId = null;
+  }
+  if (_activeSnoozeRoute == thisRoute) {
+    _activeSnoozeRoute = null;
+  }
+  if (_snoozeRoutesByHabitId[thisHabitId] == thisRoute) {
+    _snoozeRoutesByHabitId.remove(thisHabitId);
+  }
+  // Popping this Habit's page may have revealed an older Habit's own
+  // Snooze Page that was still open underneath in the stack. Re-sync
+  // tracking to it (without pushing anything new) so a still-unresolved
+  // newer alarm can correctly displace it later, instead of leaving
+  // tracking stuck at null.
+  if (_activeSnoozeHabitId == null && _activeAlarmOrder.isNotEmpty) {
+    final revealed = _activeAlarmOrder.last;
+    if (_snoozeRoutesByHabitId.containsKey(revealed)) {
+      _activeSnoozeHabitId = revealed;
+    }
+      }
+    });
     } else {
       // Notification → langsung ke Habit page (halaman utama), tanpa
       // menumpuk halaman lain di atasnya.
@@ -711,9 +714,9 @@ class ReminderService {
   /// opens the newest unresolved one's own Snooze Page using the exact
   /// same routing already used for a live notification tap.
   Future<void> resumeSnoozePageIfUnresolvedAlarmExists() async {
-    if (_activeSnoozeHabitId != null) return;
     if (_activeAlarmOrder.isEmpty) return;
     final habitId = _activeAlarmOrder.last;
+    if (_activeSnoozeHabitId == habitId) return;
     final reminderTime = _alarmReminderTimeCache[habitId] ?? '';
     final payload = ReminderPayload(
       habitId: habitId,
@@ -754,6 +757,26 @@ class ReminderService {
       _activeAlarmHabitIds.remove(habitId);
       _activeAlarmOrder.remove(habitId);
     }
+    _switchSnoozePageToNewestIfNeeded();
+  }
+
+  /// If a Snooze Page is currently visible for a habit that is no longer
+  /// the newest active alarm, replace it with the newest active alarm's
+  /// own Snooze Page. This ensures the visible Snooze Page always tracks
+  /// the most recently activated alarm, switching immediately whenever a
+  /// newer reminder becomes active while an older one is still on screen.
+  void _switchSnoozePageToNewestIfNeeded() {
+    if (_activeAlarmOrder.isEmpty) return;
+    final newestHabitId = _activeAlarmOrder.last;
+    if (_activeSnoozeHabitId == null) return;
+    if (_activeSnoozeHabitId == newestHabitId) return;
+    final reminderTime = _alarmReminderTimeCache[newestHabitId] ?? '';
+    final payload = ReminderPayload(
+      habitId: newestHabitId,
+      reminderTime: reminderTime,
+      type: 'alarm',
+    );
+    _handleBodyTap(payload);
   }
 
   /// Schedules the native alarm sound (same MediaPlayer/RingtoneManager
@@ -1045,6 +1068,7 @@ class ReminderService {
           matchDateTimeComponents: DateTimeComponents.time, // ulang tiap hari
         );
       } else if (r.type == 'alarm') {
+        _alarmReminderTimeCache[habitId] = r.time;   // ADD THIS LINE
         await _plugin.zonedSchedule(
           id,
           habitTitle,
@@ -1080,13 +1104,13 @@ class ReminderService {
     // and the next scheduled alarm all stay synchronized (Alarm only —
     // Notification reminders keep using the original reminderTime).
     final effectiveTime = type == 'alarm'
-        ? '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}'
-        : reminderTime;
+    ? '${target.hour.toString().padLeft(2, '0')}:${target.minute.toString().padLeft(2, '0')}'
+    : reminderTime;
     final id = _notifId(habitId, effectiveTime);
-    // Preserve the habit title across snooze cycles so that if the app
-    // process is later killed and restarted before the postponed alarm
-    // fires again, the cached title is still available as a fallback.
     rememberHabitTitle(habitId, habitTitle);
+    if (type == 'alarm') {
+      _alarmReminderTimeCache[habitId] = effectiveTime;   // ADD THIS LINE
+    }
     final payload = ReminderPayload(
       habitId: habitId,
       reminderTime: effectiveTime,
