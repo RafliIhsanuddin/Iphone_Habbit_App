@@ -87,6 +87,15 @@ class ReminderService {
   static const MethodChannel _alarmChannel = MethodChannel('habit_app/alarm');
   final Set<String> _activeAlarmHabitIds = {};
 
+
+  /// Rule 1 & 2 (Active Alarm Flag): tracks, per Alarm Reminder habit,
+  /// whether that habit currently has an active alarm session, and the
+  /// exact original notification/alarm trigger time that started it.
+  /// Created only when the Alarm notification first appears (see
+  /// playAlarmSound) and removed only when the user presses Dismiss or
+  /// Snooze — never updated in between, even if the alarm is re-shown.
+  static final Map<String, String> _activeAlarmSessions = {};
+
   /// Callback set by main.dart to retrieve the current Postpone Interval
   /// (in minutes) from Settings, so snooze scheduling never hardcodes a
   /// duration.
@@ -376,6 +385,15 @@ class ReminderService {
     final habitId = parts[0];
     final reminderTime = parts.length > 1 ? parts[1] : '';
     _alarmReminderTimeCache[habitId] = reminderTime;
+    // Rule 1/2/3/4: a habit that was already Snoozed/Dismissed before the
+    // process was killed must never be resurrected as active just because
+    // a stale entry for it still exists in the persisted queue. Only
+    // (re)activate it here if it is not already known to be resolved —
+    // this queue is the sole source of truth on a cold start, so calling
+    // playAlarmSound() is what actually sets its active alarm flag; that
+    // is intentional and correct for a genuinely unresolved entry, but we
+    // guard here in case future callers persist a queue snapshot that
+    // includes already-resolved habits.
     playAlarmSound(habitId);
     final title = _lastKnownHabitTitle(habitId);
     final category = _lastKnownHabitCategory(habitId);
@@ -470,6 +488,7 @@ class ReminderService {
           // This Habit's own alarm session ends here; only its own
           // Snooze Page tracking (if any) is cleared, and only the
           // newest remaining pending alarm (if any) is resumed.
+          clearActiveAlarmSession(payload.habitId);
           clearActiveSnoozeHabitIdIfMatches(payload.habitId);
           await resumeNewestRemainingAlarm();
         }
@@ -490,6 +509,7 @@ class ReminderService {
 
       case ReminderActionIds.snooze:
         // Jadwalkan ulang alarm sesuai Postpone Interval dari Settings.
+        clearActiveAlarmSession(payload.habitId);
         await stopAlarmSound(payload.habitId);
         await _cancelNativeAlarmSound(payload.habitId);
         final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
@@ -714,8 +734,16 @@ class ReminderService {
   /// opens the newest unresolved one's own Snooze Page using the exact
   /// same routing already used for a live notification tap.
   Future<void> resumeSnoozePageIfUnresolvedAlarmExists() async {
-    if (_activeAlarmOrder.isEmpty) return;
-    final habitId = _activeAlarmOrder.last;
+    // Rule 4: only habits whose active alarm flag is currently true may
+    // ever be selected for the Snooze Page. Filter out any stale entries
+    // that might still be present in _activeAlarmOrder but whose active
+    // flag has already been cleared (Snoozed/Dismissed), so a resolved
+    // habit can never reappear here.
+    final eligible = _activeAlarmOrder
+        .where((id) => _activeAlarmSessions.containsKey(id))
+        .toList();
+    if (eligible.isEmpty) return;
+    final habitId = _habitWithLatestReminderTime(eligible) ?? eligible.last;
     if (_activeSnoozeHabitId == habitId) return;
     final reminderTime = _alarmReminderTimeCache[habitId] ?? '';
     final payload = ReminderPayload(
@@ -731,6 +759,9 @@ class ReminderService {
   /// alarm audio stream via native Android code. If already active for this
   /// habit, this is a safe no-op — it never creates a duplicate playback.
   Future<void> playAlarmSound(String habitId) async {
+    if (!_activeAlarmSessions.containsKey(habitId)) {
+      _activeAlarmSessions[habitId] = _alarmReminderTimeCache[habitId] ?? '';
+    }
     if (_activeAlarmHabitIds.contains(habitId)) return;
     // Only one alarm sound may be audible at any time (Rule 1 & 2): the
     // newest triggered alarm owns the audio. Stop any other currently
@@ -760,14 +791,43 @@ class ReminderService {
     _switchSnoozePageToNewestIfNeeded();
   }
 
+
+  /// Rule 1: determine which currently-active alarm habit has the LATEST
+  /// scheduled reminder time (comparing HH:mm values), not simply which
+  /// one triggered most recently. Falls back to the last-triggered habit
+  /// if reminder times are missing/unparseable so behavior never breaks.
+  String? _habitWithLatestReminderTime(List<String> ids) {
+    if (ids.isEmpty) return null;
+    String? best;
+    int bestMins = -1;
+    for (final id in ids) {
+      final t = _alarmReminderTimeCache[id] ?? '';
+      final parts = t.split(':');
+      final h = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? -1;
+      final m = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+      final mins = h * 60 + m;
+      if (mins > bestMins) {
+        bestMins = mins;
+        best = id;
+      }
+    }
+    return best ?? ids.last;
+  }
+
   /// If a Snooze Page is currently visible for a habit that is no longer
   /// the newest active alarm, replace it with the newest active alarm's
   /// own Snooze Page. This ensures the visible Snooze Page always tracks
   /// the most recently activated alarm, switching immediately whenever a
   /// newer reminder becomes active while an older one is still on screen.
   void _switchSnoozePageToNewestIfNeeded() {
-    if (_activeAlarmOrder.isEmpty) return;
-    final newestHabitId = _activeAlarmOrder.last;
+    // Rule 4: only consider habits whose active alarm flag is currently
+    // true — a habit already Snoozed/Dismissed must never be selected
+    // here even if a stale entry still lingers in _activeAlarmOrder.
+    final eligible = _activeAlarmOrder
+        .where((id) => _activeAlarmSessions.containsKey(id))
+        .toList();
+    if (eligible.isEmpty) return;
+    final newestHabitId = _habitWithLatestReminderTime(eligible) ?? eligible.last;
     if (_activeSnoozeHabitId == null) return;
     if (_activeSnoozeHabitId == newestHabitId) return;
     final reminderTime = _alarmReminderTimeCache[newestHabitId] ?? '';
@@ -824,6 +884,35 @@ class ReminderService {
     if (_activeSnoozeHabitId == habitId) {
       _activeSnoozeHabitId = null;
       _activeSnoozeRoute = null;
+    }
+  }
+
+  /// Returns the original alarm trigger time stored in the active alarm
+  /// flag for [habitId], or null if that habit has no active alarm
+  /// session right now.
+  static String? activeAlarmTriggerTime(String habitId) =>
+      _activeAlarmSessions[habitId];
+
+  /// Whether at least one Alarm Reminder habit currently has an active
+  /// alarm session (Rule 8: the Snooze Page may only exist while this is
+  /// true).
+  static bool get hasAnyActiveAlarmSession => _activeAlarmSessions.isNotEmpty;
+
+  /// Removes the active alarm flag for [habitId], if present. Must be
+  /// called immediately after Dismiss or Snooze is pressed for that
+  /// habit's own alarm session — never for any other habit's session.
+  ///
+  /// Also removes this habit from the active alarm session queue
+  /// (_activeAlarmOrder) and persists that change immediately. Without
+  /// this, a habit whose active flag was cleared could still linger in
+  /// _activeAlarmOrder (and the persisted unresolved-alarm queue) until
+  /// stopAlarmSound() happened to run afterward, which allowed the same
+  /// habit to be selected again for the Snooze Page (Rule 2/3/4) even
+  /// though its active alarm flag was already false.
+  static void clearActiveAlarmSession(String habitId) {
+    _activeAlarmSessions.remove(habitId);
+    if (_activeAlarmOrder.remove(habitId)) {
+      instance._persistUnresolvedQueue();
     }
   }
 

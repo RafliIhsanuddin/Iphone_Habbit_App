@@ -9010,6 +9010,7 @@ class HabitHomePage extends StatefulWidget {
 }
 
 class _HabitHomePageState extends State<HabitHomePage> with WidgetsBindingObserver {
+  bool get _mainPageNavigationBlocked => ReminderService.hasAnyActiveAlarmSession;
   bool _searchOpen=false;
   DateTime _sel=DateTime.now();
   late DateTime _weekStart;
@@ -9280,7 +9281,15 @@ class _HabitHomePageState extends State<HabitHomePage> with WidgetsBindingObserv
     const swdays=['MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY'];
     const smons=['JANUARY','FEBRUARY','MARCH','APRIL','MAY','JUNE','JULY','AUGUST','SEPTEMBER','OCTOBER','NOVEMBER','DECEMBER'];
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_mainPageNavigationBlocked,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_mainPageNavigationBlocked) {
+          ReminderService.instance.resumeSnoozePageIfUnresolvedAlarmExists();
+        }
+      },
+      child: Scaffold(
       key:_scaffoldKey,
       backgroundColor:Colors.black,
       drawer:Drawer(width:MediaQuery.of(context).size.width*0.72,backgroundColor:const Color(0xFF1C1C1C),child:SafeArea(child:Padding(padding:const EdgeInsets.fromLTRB(28,32,28,28),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -9483,6 +9492,7 @@ class _HabitHomePageState extends State<HabitHomePage> with WidgetsBindingObserv
             )),
       ])),
       floatingActionButton:GestureDetector(onTap:_add,child:Container(width:54,height:54,decoration:const BoxDecoration(color:Color(0xFF2C2C2C),shape:BoxShape.circle),child:const Icon(Icons.add,color:Colors.white,size:26))),
+      ),
     );
   }
 

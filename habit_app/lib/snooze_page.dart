@@ -48,6 +48,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     // Only stop/cancel/reschedule THIS Habit's own alarm session — never
     // another Habit's, even if this page was opened while a different
     // Habit's alarm was mid-flight.
+    ReminderService.clearActiveAlarmSession(habitId);
     await ReminderService.instance.stopAlarmSound(habitId);
     await ReminderService.instance.cancelNativeAlarmSoundPublic(habitId);
     await ReminderService.instance.cancelReminderSlot(
@@ -82,12 +83,17 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
     return '$h:$m';
   }
 
-  String get _displayedAlarmTime =>
-      widget.reminderTime.isNotEmpty ? widget.reminderTime : _currentTimeLabel();
+  String get _displayedAlarmTime {
+    final stored = ReminderService.activeAlarmTriggerTime(habitId);
+    if (stored != null && stored.isNotEmpty) return stored;
+    return widget.reminderTime.isNotEmpty ? widget.reminderTime : _currentTimeLabel();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(
@@ -230,6 +236,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
                 if (widget.reminderTime.isNotEmpty) {
                   await ReminderService.instance.cancelReminderSlot(habitId, widget.reminderTime);
                 }
+                ReminderService.clearActiveAlarmSession(habitId);
                 ReminderService.clearActiveSnoozeHabitIdIfMatches(habitId);
                 await ReminderService.instance.resumeNewestRemainingAlarm();
                 if (mounted && Navigator.of(context).canPop()) {
@@ -261,6 +268,7 @@ class _SnoozePageState extends State<SnoozePage> with SingleTickerProviderStateM
             ),
           ],
         ),
+      ),
       ),
     );
   }
