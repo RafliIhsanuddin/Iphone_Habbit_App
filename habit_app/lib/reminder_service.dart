@@ -276,9 +276,54 @@ class ReminderService {
   Future<void> consumePendingBackgroundAction() async {
     final prefs = await SharedPreferences.getInstance();
     final habitId = prefs.getString('pending_mark_done_habit_id');
-    if (habitId == null) return;
-    await prefs.remove('pending_mark_done_habit_id');
-    onMarkDone?.call(habitId);
+    if (habitId != null) {
+      await prefs.remove('pending_mark_done_habit_id');
+      onMarkDone?.call(habitId);
+    }
+
+    // Resolve a Dismiss that was pressed while the app was backgrounded
+    // or terminated. This mirrors the foreground Dismiss path exactly:
+    // stop the native alarm sound, clear the active alarm flag, drop it
+    // from the active-alarm queue, and let the next-newest alarm (if
+    // any) resume. This habit's Snooze Page can never reopen afterward.
+    final dismissEntry = prefs.getString('pending_alarm_dismiss');
+    if (dismissEntry != null) {
+      await prefs.remove('pending_alarm_dismiss');
+      final parts = dismissEntry.split('|');
+      final dHabitId = parts[0];
+      await stopAlarmSound(dHabitId);
+      await cancelNativeAlarmSoundPublic(dHabitId);
+      clearActiveAlarmSession(dHabitId);
+      clearActiveSnoozeHabitIdIfMatches(dHabitId);
+      await resumeNewestRemainingAlarm();
+    }
+
+    // Resolve a Snooze that was pressed while the app was backgrounded
+    // or terminated. This mirrors the foreground Snooze path: stop the
+    // sound, clear this habit's current session so its old Snooze Page
+    // can never reopen, then reschedule using the configured Snooze
+    // duration and show the same confirmation message.
+    final snoozeEntry = prefs.getString('pending_alarm_snooze');
+    if (snoozeEntry != null) {
+      await prefs.remove('pending_alarm_snooze');
+      final parts = snoozeEntry.split('|');
+      final sHabitId = parts[0];
+      final sReminderTime = parts.length > 1 ? parts[1] : '';
+      await stopAlarmSound(sHabitId);
+      await cancelNativeAlarmSoundPublic(sHabitId);
+      clearActiveAlarmSession(sHabitId);
+      final snoozeMinutes = getSnoozeMinutes?.call() ?? 10;
+      await rescheduleSingleInMinutes(
+        habitId: sHabitId,
+        habitTitle: _lastKnownHabitTitle(sHabitId),
+        reminderTime: sReminderTime,
+        type: 'alarm',
+        minutesFromNow: snoozeMinutes,
+      );
+      await showSnoozeConfirmationNotification(snoozeMinutes);
+      clearActiveSnoozeHabitIdIfMatches(sHabitId);
+      await resumeNewestRemainingAlarm();
+    }
   }
 
   /// Handles the case where the app process was not running (or its
@@ -497,14 +542,15 @@ class ReminderService {
 
       case ReminderActionIds.postponed:
         // Jadwalkan ulang +10 menit, tampilkan konfirmasi platform.
+        final postponeMinutes = getSnoozeMinutes?.call() ?? 10;
         rescheduleSingleInMinutes(
           habitId: payload.habitId,
           habitTitle: _lastKnownHabitTitle(payload.habitId),
           reminderTime: payload.reminderTime,
           type: 'notification',
-          minutesFromNow: 10,
+          minutesFromNow: postponeMinutes,
         );
-        _showConfirmationToast('Postponed for 10 minutes');
+        _showConfirmationToast('Reminder postponed for $postponeMinutes minutes');
         break;
 
       case ReminderActionIds.snooze:
@@ -676,6 +722,26 @@ class ReminderService {
       final plugin = ReminderService.instance._plugin;
       await plugin.cancel(ReminderService.instance
           ._notifId(payload.habitId, payload.reminderTime));
+      // Stop the audible native alarm sound (MediaPlayer) for this exact
+      // habit right now, via the same MethodChannel already used in the
+      // foreground — this works even in this background isolate as long
+      // as the Android process/engine is still resident, and covers the
+      // common case where the process has not yet been fully killed.
+      await ReminderService.instance._broadcastNativeStopAlarm(payload.habitId);
+      // The active alarm session/Snooze-Page queue can only be safely
+      // resolved with the full plugin/timezone context, which may not be
+      // available in this background isolate. Persist the action here
+      // and fully resolve it (clear session, reschedule if snoozed) the
+      // next time the app is opened, so the completed reminder instance
+      // never reopens its Snooze Page again.
+      final prefs = await SharedPreferences.getInstance();
+      final entry = '${payload.habitId}|${payload.reminderTime}';
+      if (response.actionId == ReminderActionIds.dismiss) {
+        await prefs.setString('pending_alarm_dismiss', entry);
+      } else {
+        await prefs.setString('pending_alarm_snooze', entry);
+      }
+      return;
     }
     if (response.actionId != ReminderActionIds.done) return;
     final prefs = await SharedPreferences.getInstance();
@@ -952,7 +1018,7 @@ class ReminderService {
   /// alarm sound, so it appears even after the app has moved to the
   /// background / device home screen is shown.
   Future<void> showSnoozeConfirmationNotification(int minutes) async {
-    final message = 'Snooze for $minutes ${minutes == 1 ? "minute" : "minutes"}';
+    final message = 'Reminder postponed for $minutes ${minutes == 1 ? "minute" : "minutes"}';
     try {
       await _alarmChannel.invokeMethod('showSnoozeToast', {'message': message});
     } on PlatformException catch (e) {
@@ -1037,6 +1103,22 @@ class ReminderService {
       interruptionLevel: InterruptionLevel.timeSensitive,
     );
     return const NotificationDetails(android: androidDetails, iOS: iosDetails);
+  }
+
+  /// Broadcasts a native "stop this habit's alarm sound now" signal to
+  /// AlarmActionReceiver, independent of the Dart isolate lifecycle. Used
+  /// right when Dismiss/Snooze is pressed (foreground or background) so
+  /// the audible alarm sound stops immediately even if the surrounding
+  /// Dart-side session bookkeeping is delayed or the process is about to
+  /// be killed.
+  Future<void> _broadcastNativeStopAlarm(String habitId) async {
+    try {
+      await _alarmChannel.invokeMethod('stopAlarm', {'habitId': habitId});
+    } on PlatformException catch (e) {
+      debugPrint('_broadcastNativeStopAlarm failed for $habitId: $e');
+    } catch (e) {
+      debugPrint('_broadcastNativeStopAlarm failed for $habitId: $e');
+    }
   }
 
   /// Batalkan satu slot reminder (dipakai internal & juga dipanggil langsung

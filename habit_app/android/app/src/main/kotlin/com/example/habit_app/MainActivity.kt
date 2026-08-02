@@ -27,6 +27,22 @@ class MainActivity : FlutterActivity() {
             startNativeAlarmSound(context, habitId)
         }
 
+        // Stops and releases this habit's own MediaPlayer immediately,
+        // callable directly from a native BroadcastReceiver (e.g. when a
+        // Dismiss/Snooze action button is pressed while the app is
+        // backgrounded or fully killed), without requiring the Dart
+        // isolate or MethodChannel to be alive. Safe no-op if no player
+        // is currently active for this habit.
+        fun stopAlarmPlaybackStatic(habitId: String) {
+            try {
+                activePlayers.remove(habitId)?.apply {
+                    stop()
+                    release()
+                }
+            } catch (e: Exception) {
+            }
+        }
+
         fun startNativeAlarmSound(context: android.content.Context, habitId: String) {
             try {
                 if (!activePlayers.containsKey(habitId)) {
