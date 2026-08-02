@@ -4726,10 +4726,10 @@ class _HabitFrequencyScreenState extends State<HabitFrequencyScreen> {
     for(int i=0;i<days.length;i+=3){
       final rDays=days.sublist(i,i+3>days.length?days.length:i+3);
       while(rDays.length<3)rDays.add('');
-      rows.add(Padding(padding:const EdgeInsets.only(bottom:12,left:32),child:Row(children:rDays.map((d){
+      rows.add(Padding(padding:const EdgeInsets.only(bottom:12,left:24,right:8),child:Row(children:rDays.map((d){
         if(d.isEmpty)return const Expanded(child:SizedBox());
         final chk=_wDays[d]!;
-        return Expanded(child:GestureDetector(onTap:()=>setState(()=>_wDays[d]=!chk),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:20,height:20,decoration:BoxDecoration(border:Border.all(color:Colors.white,width:1.5),color:chk?Colors.white:Colors.transparent),child:chk?const Icon(Icons.check,size:14,color:Colors.black):null),const SizedBox(width:8),Text(d,style:const TextStyle(color:Colors.white,fontSize:13,fontWeight:FontWeight.w700,letterSpacing:0.3))])));
+        return Expanded(child:GestureDetector(onTap:()=>setState(()=>_wDays[d]=!chk),child:Row(mainAxisSize:MainAxisSize.min,children:[Container(width:20,height:20,decoration:BoxDecoration(border:Border.all(color:Colors.white,width:1.5),color:chk?Colors.white:Colors.transparent),child:chk?const Icon(Icons.check,size:14,color:Colors.black):null),const SizedBox(width:4),Flexible(child:Text(d,softWrap:false,style:const TextStyle(color:Colors.white,fontSize:11,fontWeight:FontWeight.w700,letterSpacing:0.1)))])));
       }).toList())));
     }
     return Column(crossAxisAlignment:CrossAxisAlignment.start,children:rows);
@@ -8959,7 +8959,7 @@ class _PostponeIntervalPickerDialogState extends State<_PostponeIntervalPickerDi
                               TextSpan(
                                 text: _values[realIndex] == 1 ? 'MINUTE' : 'MINUTES',
                                 style: TextStyle(
-                                  color: (isSel ? Colors.white : Colors.white38).withValues(alpha: isSel ? 0.6 : 0.4),
+                                  color: isSel ? Colors.white : Colors.white38.withValues(alpha: 0.4),
                                   fontSize: isSel ? 17 : 14,
                                   fontWeight: isSel ? FontWeight.w800 : FontWeight.w400,
                                 ),
