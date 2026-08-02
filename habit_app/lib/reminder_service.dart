@@ -575,6 +575,9 @@ class ReminderService {
       // instead of losing track of it — each habit's own Snooze Page
       // session must remain independently trackable so its own
       // notification can always reopen it.
+      if (_snoozeRoutesByHabitId.containsKey(thisHabitId)) {
+        return;
+      }
       late final Route<dynamic> thisRoute;
       thisRoute = PageRouteBuilder(
         settings: RouteSettings(name: 'snooze_page_$thisHabitId'),
@@ -828,7 +831,11 @@ class ReminderService {
         .toList();
     if (eligible.isEmpty) return;
     final newestHabitId = _habitWithLatestReminderTime(eligible) ?? eligible.last;
-    if (_activeSnoozeHabitId == null) return;
+    if (_activeSnoozeHabitId != null && eligible.contains(_activeSnoozeHabitId)) {
+      final currentTime = _alarmReminderTimeCache[_activeSnoozeHabitId] ?? '';
+      final computedTime = _alarmReminderTimeCache[newestHabitId] ?? '';
+      if (currentTime == computedTime) return;
+    }
     if (_activeSnoozeHabitId == newestHabitId) return;
     final reminderTime = _alarmReminderTimeCache[newestHabitId] ?? '';
     final payload = ReminderPayload(
